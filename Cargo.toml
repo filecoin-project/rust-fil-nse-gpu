@@ -1,0 +1,12 @@
+[package]
+name = "rust-fil-nse-gpu"
+version = "0.1.0"
+authors = ["Keyvan Kambakhsh <keyvankambakhsh@gmail.com>"]
+description = "Rust interface to GPU implementation of Filecoin's Narrow Stacked Expander (NSE) sealing algorithm"
+edition = "2018"
+homepage = "https://github.com/filecoin-project/rust-fil-nse-gpu"
+license = "MIT/Apache-2.0"
+repository = "https://github.com/filecoin-project/rust-fil-nse-gpu"
+
+[dependencies]
+ocl = { version = "0.19.4", package = "fil-ocl"}
