@@ -13,3 +13,4 @@ ocl = { version = "0.19.4", package = "fil-ocl"}
 ff = { version = "0.2.0", package = "fff" }
 paired = { version = "0.18.0" }
 ff-cl-gen = { git = "https://github.com/filecoin-project/ff-cl-gen.git"}
+itertools = { version = "0.8.0" }
