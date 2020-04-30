@@ -1,8 +1,13 @@
-__constant uint SHA256_INIT[8] =
-{
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
-};
+typedef struct {
+  uint vals[8];
+} sha256_state;
+
+typedef struct {
+  uint vals[16];
+} sha256_data;
+
+#define sha256_ZERO ((sha256_data){{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}})
+#define sha256_INIT ((sha256_state){{0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19}})
 
 __constant uint SHA256_K[64] =
 {
@@ -32,78 +37,78 @@ __constant uint SHA256_K[64] =
 #define s0I(x) ((uint)rotate((uint)x,(uint)25) ^ (uint)rotate((uint)x,(uint)14) ^ (x>>3))
 #define s1I(x) ((uint)rotate((uint)x,(uint)15) ^ (uint)rotate((uint)x,(uint)13) ^ (x>>10))
 
-void sha256(__global uint *data, __global uint *digest)
+sha256_state sha256_update(sha256_state state, sha256_data data)
 {
 	uint W00,W01,W02,W03,W04,W05,W06,W07;
 	uint W08,W09,W10,W11,W12,W13,W14,W15;
 	uint T0,T1,T2,T3,T4,T5,T6,T7;
 
-	T0 = SHA256_INIT[0]; T1 = SHA256_INIT[1];
-	T2 = SHA256_INIT[2]; T3 = SHA256_INIT[3];
-	T4 = SHA256_INIT[4]; T5 = SHA256_INIT[5];
-	T6 = SHA256_INIT[6]; T7 = SHA256_INIT[7];
+	T0 = state.vals[0]; T1 = state.vals[1];
+	T2 = state.vals[2]; T3 = state.vals[3];
+	T4 = state.vals[4]; T5 = state.vals[5];
+	T6 = state.vals[6]; T7 = state.vals[7];
 
-	T7 += S1I( T4 ) + ChI( T4, T5, T6 ) + SHA256_K[0] + ( (W00 = data[0]) );
+	T7 += S1I( T4 ) + ChI( T4, T5, T6 ) + SHA256_K[0] + ( (W00 = data.vals[0]) );
 	T3 += T7;
 	T7 += S0I( T0 ) + MajI( T0, T1, T2 );
 
-	T6 += S1I( T3 ) + ChI( T3, T4, T5 ) + SHA256_K[1] + ( (W01 = data[1]) );
+	T6 += S1I( T3 ) + ChI( T3, T4, T5 ) + SHA256_K[1] + ( (W01 = data.vals[1]) );
 	T2 += T6;
 	T6 += S0I( T7 ) + MajI( T7, T0, T1 );
 
-	T5 += S1I( T2 ) + ChI( T2, T3, T4 ) + SHA256_K[2] + ( (W02 = data[2]) );
+	T5 += S1I( T2 ) + ChI( T2, T3, T4 ) + SHA256_K[2] + ( (W02 = data.vals[2]) );
 	T1 += T5;
 	T5 += S0I( T6 ) + MajI( T6, T7, T0 );
 
-	T4 += S1I( T1 ) + ChI( T1, T2, T3 ) + SHA256_K[3] + ( (W03 = data[3]) );
+	T4 += S1I( T1 ) + ChI( T1, T2, T3 ) + SHA256_K[3] + ( (W03 = data.vals[3]) );
 	T0 += T4;
 	T4 += S0I( T5 ) + MajI( T5, T6, T7 );
 
-	T3 += S1I( T0 ) + ChI( T0, T1, T2 ) + SHA256_K[4] + ( (W04 = data[4]) );
+	T3 += S1I( T0 ) + ChI( T0, T1, T2 ) + SHA256_K[4] + ( (W04 = data.vals[4]) );
 	T7 += T3;
 	T3 += S0I( T4 ) + MajI( T4, T5, T6 );
 
-	T2 += S1I( T7 ) + ChI( T7, T0, T1 ) + SHA256_K[5] + ( (W05 = data[5]) );
+	T2 += S1I( T7 ) + ChI( T7, T0, T1 ) + SHA256_K[5] + ( (W05 = data.vals[5]) );
 	T6 += T2;
 	T2 += S0I( T3 ) + MajI( T3, T4, T5 );
 
-	T1 += S1I( T6 ) + ChI( T6, T7, T0 ) + SHA256_K[6] + ( (W06 = data[6]) );
+	T1 += S1I( T6 ) + ChI( T6, T7, T0 ) + SHA256_K[6] + ( (W06 = data.vals[6]) );
 	T5 += T1;
 	T1 += S0I( T2 ) + MajI( T2, T3, T4 );
 
-	T0 += S1I( T5 ) + ChI( T5, T6, T7 ) + SHA256_K[7] + ( (W07 = data[7]) );
+	T0 += S1I( T5 ) + ChI( T5, T6, T7 ) + SHA256_K[7] + ( (W07 = data.vals[7]) );
 	T4 += T0;
 	T0 += S0I( T1 ) + MajI( T1, T2, T3 );
 
-	T7 += S1I( T4 ) + ChI( T4, T5, T6 ) + SHA256_K[8] + ( (W08 = data[8]) );
+	T7 += S1I( T4 ) + ChI( T4, T5, T6 ) + SHA256_K[8] + ( (W08 = data.vals[8]) );
 	T3 += T7;
 	T7 += S0I( T0 ) + MajI( T0, T1, T2 );
 
-	T6 += S1I( T3 ) + ChI( T3, T4, T5 ) + SHA256_K[9] + ( (W09 = data[9]) );
+	T6 += S1I( T3 ) + ChI( T3, T4, T5 ) + SHA256_K[9] + ( (W09 = data.vals[9]) );
 	T2 += T6;
 	T6 += S0I( T7 ) + MajI( T7, T0, T1 );
 
-	T5 += S1I( T2 ) + ChI( T2, T3, T4 ) + SHA256_K[10] + ( (W10 = data[10]) );
+	T5 += S1I( T2 ) + ChI( T2, T3, T4 ) + SHA256_K[10] + ( (W10 = data.vals[10]) );
 	T1 += T5;
 	T5 += S0I( T6 ) + MajI( T6, T7, T0 );
 
-	T4 += S1I( T1 ) + ChI( T1, T2, T3 ) + SHA256_K[11] + ( (W11 = data[11]) );
+	T4 += S1I( T1 ) + ChI( T1, T2, T3 ) + SHA256_K[11] + ( (W11 = data.vals[11]) );
 	T0 += T4;
 	T4 += S0I( T5 ) + MajI( T5, T6, T7 );
 
-	T3 += S1I( T0 ) + ChI( T0, T1, T2 ) + SHA256_K[12] + ( (W12 = data[12]) );
+	T3 += S1I( T0 ) + ChI( T0, T1, T2 ) + SHA256_K[12] + ( (W12 = data.vals[12]) );
 	T7 += T3;
 	T3 += S0I( T4 ) + MajI( T4, T5, T6 );
 
-	T2 += S1I( T7 ) + ChI( T7, T0, T1 ) + SHA256_K[13] + ( (W13 = data[13]) );
+	T2 += S1I( T7 ) + ChI( T7, T0, T1 ) + SHA256_K[13] + ( (W13 = data.vals[13]) );
 	T6 += T2;
 	T2 += S0I( T3 ) + MajI( T3, T4, T5 );
 
-	T1 += S1I( T6 ) + ChI( T6, T7, T0 ) + SHA256_K[14] + ( (W14 = data[14]) );
+	T1 += S1I( T6 ) + ChI( T6, T7, T0 ) + SHA256_K[14] + ( (W14 = data.vals[14]) );
 	T5 += T1;
 	T1 += S0I( T2 ) + MajI( T2, T3, T4 );
 
-	T0 += S1I( T5 ) + ChI( T5, T6, T7 ) + SHA256_K[15] + ( (W15 = data[15]) );
+	T0 += S1I( T5 ) + ChI( T5, T6, T7 ) + SHA256_K[15] + ( (W15 = data.vals[15]) );
 	T4 += T0;
 	T0 += S0I( T1 ) + MajI( T1, T2, T3 );
 
@@ -307,12 +312,27 @@ void sha256(__global uint *data, __global uint *digest)
 	T4 += T0;
 	T0 += S0I( T1 ) + MajI( T1, T2, T3 );
 
-	digest[0] = T0 + SHA256_INIT[0];
-	digest[1] = T1 + SHA256_INIT[1];
-	digest[2] = T2 + SHA256_INIT[2];
-	digest[3] = T3 + SHA256_INIT[3];
-	digest[4] = T4 + SHA256_INIT[4];
-	digest[5] = T5 + SHA256_INIT[5];
-	digest[6] = T6 + SHA256_INIT[6];
-	digest[7] = T7 + SHA256_INIT[7];
+	state.vals[0] += T0;
+	state.vals[1] += T1;
+  state.vals[2] += T2;
+  state.vals[3] += T3;
+  state.vals[4] += T4;
+  state.vals[5] += T5;
+  state.vals[6] += T6;
+  state.vals[7] += T7;
+
+  return state;
+}
+
+sha256_state sha256(sha256_data data) {
+  return sha256_update(sha256_INIT, data);
+}
+
+__kernel void sha256_test(__global uint *data, __global uint *digest) {
+  sha256_data dat = sha256_ZERO;
+  for(uint i = 0; i < 16; i++)
+    dat.vals[i] = data[i];
+  sha256_state s = sha256(dat);
+  for(uint i = 0; i < 8; i++)
+    digest[i] = s.vals[i];
 }
