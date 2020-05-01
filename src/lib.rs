@@ -21,19 +21,12 @@ impl Default for Node {
 pub struct Layer(Vec<Node>);
 
 pub trait NarrowStackedExpander {
-    fn new(leaf_count: usize) -> Self;
+    fn new(config: Config) -> Self;
     fn generate_mask_layer(&mut self, replica_id: Node, window_index: usize) -> Layer;
     fn generate_expander_layer(&mut self, layer_index: usize) -> Layer;
     fn generate_butterfly_layer(&mut self, layer_index: usize) -> Layer;
     fn combine_layer(&self, layer: &Layer) -> Layer {
-        let batch_size = self.combine_batch_size();
-        let mut result = Vec::with_capacity(self.leaf_count());
-        &(layer.0)
-            .chunks(batch_size)
-            .enumerate()
-            .for_each(|(i, chunk)| result.extend(self.combine_segment(i * batch_size, chunk)));
-
-        Layer(result)
+        Layer(self.combine_segment(0, &layer.0))
     }
     fn combine_segment(&self, offset: usize, segment: &[Node]) -> Vec<Node>;
     fn combine_batch_size(&self) -> usize;
@@ -44,7 +37,7 @@ pub trait NarrowStackedExpander {
 // layers are 1-indexed,
 
 /// The configuration parameters for NSE.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Config {
     /// Batch hashing factor.
     pub k: u32,
@@ -115,7 +108,6 @@ impl Unsealer {}
 pub struct KeyGenerator {
     replica_id: Node,
     window_index: usize,
-    config: Config,
     current_layer_index: usize,
     gpu: GPU,
 }
@@ -126,11 +118,15 @@ impl KeyGenerator {
         Self {
             replica_id,
             window_index,
-            config,
             current_layer_index: 0, // Initial value of 0 means the current layer precedes any generated layer.
             gpu,
         }
     }
+
+    fn config(&self) -> Config {
+        self.gpu.config
+    }
+
     fn layers_remaining(&self) -> usize {
         self.len() - self.current_layer_index
     }
@@ -159,7 +155,7 @@ impl Iterator for KeyGenerator {
     type Item = Layer;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let last_index = self.config.num_expander_layers + self.config.num_butterfly_layers;
+        let last_index = self.config().num_expander_layers + self.config().num_butterfly_layers;
 
         // If current index is last, then we have already finished generating layers.
         if self.current_layer_index >= last_index {
@@ -174,7 +170,7 @@ impl Iterator for KeyGenerator {
 
         // When current index equals number of expander layers, we need to generate the last expander layer.
         // Before that, generate earlier expander layers.
-        if self.current_layer_index <= self.config.num_expander_layers {
+        if self.current_layer_index <= self.config().num_expander_layers {
             return Some(self.generate_expander_layer());
         }
 
@@ -190,6 +186,6 @@ impl Iterator for KeyGenerator {
 
 impl ExactSizeIterator for KeyGenerator {
     fn len(&self) -> usize {
-        self.config.num_expander_layers + self.config.num_butterfly_layers
+        self.config().num_expander_layers + self.config().num_butterfly_layers
     }
 }

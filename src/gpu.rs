@@ -1,18 +1,18 @@
-use super::{Layer, NarrowStackedExpander, Node, COMBINE_BATCH_SIZE};
+use super::{Config, Layer, NarrowStackedExpander, Node, COMBINE_BATCH_SIZE};
 use ocl::OclPrm;
 
 unsafe impl OclPrm for Node {}
 
 pub struct GPU {
-    leaf_count: usize,
     combine_batch_size: usize,
+    pub config: Config,
 }
 
 impl NarrowStackedExpander for GPU {
-    fn new(leaf_count: usize) -> Self {
+    fn new(config: Config) -> Self {
         GPU {
-            leaf_count,
             combine_batch_size: COMBINE_BATCH_SIZE,
+            config,
         }
     }
     fn generate_mask_layer(&mut self, _replica_id: Node, _window_index: usize) -> Layer {
@@ -31,6 +31,6 @@ impl NarrowStackedExpander for GPU {
         self.combine_batch_size
     }
     fn leaf_count(&self) -> usize {
-        self.leaf_count
+        self.config.n
     }
 }
