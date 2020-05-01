@@ -1,17 +1,28 @@
 mod gpu;
 mod sources;
 
+use ff::Field;
 use gpu::*;
 use paired::bls12_381::Fr;
 
 // TODO: Move these constants into configuration of GPU, Sealer, KeyGenerator, etc.
 const COMBINE_BATCH_SIZE: usize = 500000;
 
-pub struct Layer(Vec<Fr>);
+#[derive(PartialEq, Debug, Clone, Copy)]
+#[repr(transparent)]
+pub struct Node(pub Fr);
+
+impl Default for Node {
+    fn default() -> Self {
+        Node(Fr::zero())
+    }
+}
+
+pub struct Layer(Vec<Node>);
 
 pub trait NarrowStackedExpander {
     fn new(leaf_count: usize) -> Self;
-    fn generate_mask_layer(&mut self, replica_id: Fr, window_index: usize) -> Layer;
+    fn generate_mask_layer(&mut self, replica_id: Node, window_index: usize) -> Layer;
     fn generate_expander_layer(&mut self, layer_index: usize) -> Layer;
     fn generate_butterfly_layer(&mut self, layer_index: usize) -> Layer;
     fn combine_layer(&self, layer: &Layer) -> Layer {
@@ -24,7 +35,7 @@ pub trait NarrowStackedExpander {
 
         Layer(result)
     }
-    fn combine_segment(&self, offset: usize, segment: &[Fr]) -> Vec<Fr>;
+    fn combine_segment(&self, offset: usize, segment: &[Node]) -> Vec<Node>;
     fn combine_batch_size(&self) -> usize;
     fn leaf_count(&self) -> usize;
 }
@@ -58,7 +69,7 @@ impl Sealer {
     #[allow(dead_code)]
     fn new(
         config: Config,
-        replica_id: Fr,
+        replica_id: Node,
         window_index: usize,
         original_data: Layer,
         gpu: GPU,
@@ -102,7 +113,7 @@ pub struct Unsealer {
 impl Unsealer {}
 
 pub struct KeyGenerator {
-    replica_id: Fr,
+    replica_id: Node,
     window_index: usize,
     config: Config,
     current_layer_index: usize,
@@ -110,8 +121,8 @@ pub struct KeyGenerator {
 }
 
 impl KeyGenerator {
-    fn new(config: Config, replica_id: Fr, window_index: usize, gpu: GPU) -> Self {
-        assert_eq!(config.n, gpu.leaf_count() * std::mem::size_of::<Fr>());
+    fn new(config: Config, replica_id: Node, window_index: usize, gpu: GPU) -> Self {
+        assert_eq!(config.n, gpu.leaf_count() * std::mem::size_of::<Node>());
         Self {
             replica_id,
             window_index,
