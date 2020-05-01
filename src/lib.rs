@@ -1,5 +1,7 @@
+mod gpu;
 mod sources;
 
+use gpu::*;
 use paired::bls12_381::Fr;
 
 // TODO: Move these constants into configuration of GPU, Sealer, KeyGenerator, etc.
@@ -25,38 +27,6 @@ pub trait NarrowStackedExpander {
     fn combine_segment(&self, offset: usize, segment: &[Fr]) -> Vec<Fr>;
     fn combine_batch_size(&self) -> usize;
     fn leaf_count(&self) -> usize;
-}
-
-pub struct GPU {
-    leaf_count: usize,
-    combine_batch_size: usize,
-}
-
-impl NarrowStackedExpander for GPU {
-    fn new(leaf_count: usize) -> Self {
-        GPU {
-            leaf_count,
-            combine_batch_size: COMBINE_BATCH_SIZE,
-        }
-    }
-    fn generate_mask_layer(&mut self, _replica_id: Fr, _window_index: usize) -> Layer {
-        unimplemented!()
-    }
-    fn generate_expander_layer(&mut self, _layer_index: usize) -> Layer {
-        unimplemented!()
-    }
-    fn generate_butterfly_layer(&mut self, _layer_index: usize) -> Layer {
-        unimplemented!()
-    }
-    fn combine_segment(&self, _offset: usize, _segment: &[Fr]) -> Vec<Fr> {
-        unimplemented!()
-    }
-    fn combine_batch_size(&self) -> usize {
-        self.combine_batch_size
-    }
-    fn leaf_count(&self) -> usize {
-        self.leaf_count
-    }
 }
 
 // NOTES:
