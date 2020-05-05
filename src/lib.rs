@@ -1,6 +1,8 @@
+mod error;
 mod gpu;
 mod sources;
 
+use error::*;
 use ff::Field;
 use gpu::*;
 use paired::bls12_381::Fr;
@@ -20,15 +22,15 @@ impl Default for Node {
 
 pub struct Layer(Vec<Node>);
 
-pub trait NarrowStackedExpander {
-    fn new(config: Config) -> Self;
-    fn generate_mask_layer(&mut self, replica_id: Node, window_index: usize) -> Layer;
-    fn generate_expander_layer(&mut self, layer_index: usize) -> Layer;
-    fn generate_butterfly_layer(&mut self, layer_index: usize) -> Layer;
-    fn combine_layer(&self, layer: &Layer) -> Layer {
-        Layer(self.combine_segment(0, &layer.0))
+pub trait NarrowStackedExpander: Sized {
+    fn new(config: Config) -> NSEResult<Self>;
+    fn generate_mask_layer(&mut self, replica_id: Node, window_index: usize) -> NSEResult<Layer>;
+    fn generate_expander_layer(&mut self, layer_index: usize) -> NSEResult<Layer>;
+    fn generate_butterfly_layer(&mut self, layer_index: usize) -> NSEResult<Layer>;
+    fn combine_layer(&self, layer: &Layer) -> NSEResult<Layer> {
+        Ok(Layer(self.combine_segment(0, &layer.0)?))
     }
-    fn combine_segment(&self, offset: usize, segment: &[Node]) -> Vec<Node>;
+    fn combine_segment(&self, offset: usize, segment: &[Node]) -> NSEResult<Vec<Node>>;
     fn combine_batch_size(&self) -> usize;
     fn leaf_count(&self) -> usize;
 }
@@ -66,11 +68,11 @@ impl Sealer {
         window_index: usize,
         original_data: Layer,
         gpu: GPU,
-    ) -> Self {
-        Self {
+    ) -> NSEResult<Self> {
+        Ok(Self {
             original_data,
-            key_generator: KeyGenerator::new(config, replica_id, window_index, gpu),
-        }
+            key_generator: KeyGenerator::new(config, replica_id, window_index, gpu)?,
+        })
     }
 }
 
@@ -81,7 +83,12 @@ impl Iterator for Sealer {
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(next_key_layer) = self.key_generator.next() {
             if self.key_generator.layers_remaining() == 0 {
-                Some(self.key_generator.combine_layer(&self.original_data))
+                Some(
+                    // TODO: Remove `unwrap()`, handle errors
+                    self.key_generator
+                        .combine_layer(&self.original_data)
+                        .unwrap(),
+                )
             } else {
                 Some(next_key_layer)
             }
@@ -113,14 +120,14 @@ pub struct KeyGenerator {
 }
 
 impl KeyGenerator {
-    fn new(config: Config, replica_id: Node, window_index: usize, gpu: GPU) -> Self {
+    fn new(config: Config, replica_id: Node, window_index: usize, gpu: GPU) -> NSEResult<Self> {
         assert_eq!(config.n, gpu.leaf_count() * std::mem::size_of::<Node>());
-        Self {
+        Ok(Self {
             replica_id,
             window_index,
             current_layer_index: 0, // Initial value of 0 means the current layer precedes any generated layer.
             gpu,
-        }
+        })
     }
 
     fn config(&self) -> Config {
@@ -132,21 +139,21 @@ impl KeyGenerator {
     }
 
     // Generate maske layer on GPU from seeds.
-    fn generate_mask_layer(&mut self) -> Layer {
+    fn generate_mask_layer(&mut self) -> NSEResult<Layer> {
         self.gpu
             .generate_mask_layer(self.replica_id, self.window_index)
     }
 
     // Generate expander layer on GPU, using previous layer already loaded.
-    fn generate_expander_layer(&mut self) -> Layer {
+    fn generate_expander_layer(&mut self) -> NSEResult<Layer> {
         self.gpu.generate_expander_layer(self.current_layer_index)
     }
     // Generate butterfly layer on GPU, using previous layer already loaded.
-    fn generate_butterfly_layer(&mut self) -> Layer {
+    fn generate_butterfly_layer(&mut self) -> NSEResult<Layer> {
         self.gpu.generate_expander_layer(self.current_layer_index)
     }
 
-    fn combine_layer(&mut self, layer: &Layer) -> Layer {
+    fn combine_layer(&mut self, layer: &Layer) -> NSEResult<Layer> {
         self.gpu.combine_layer(layer)
     }
 }
@@ -165,19 +172,22 @@ impl Iterator for KeyGenerator {
 
         // First layer is mask layer.
         if self.current_layer_index == 1 {
-            return Some(self.generate_mask_layer());
+            // TODO: Remove `unwrap()`, handle errors
+            return Some(self.generate_mask_layer().unwrap());
         }
 
         // When current index equals number of expander layers, we need to generate the last expander layer.
         // Before that, generate earlier expander layers.
         if self.current_layer_index <= self.config().num_expander_layers {
-            return Some(self.generate_expander_layer());
+            // TODO: Remove `unwrap()`, handle errors
+            return Some(self.generate_expander_layer().unwrap());
         }
 
         // When current index equals last index (having been incremented since the first check),
         // we need to generate the last butterfly layer. Before that, generate earlier butterfly layers.
         if self.current_layer_index <= last_index {
-            return Some(self.generate_butterfly_layer());
+            // TODO: Remove `unwrap()`, handle errors
+            return Some(self.generate_butterfly_layer().unwrap());
         };
 
         unreachable!();
