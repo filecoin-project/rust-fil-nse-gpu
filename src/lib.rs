@@ -20,7 +20,7 @@ impl Default for Node {
     }
 }
 
-pub struct Layer(Vec<Node>);
+pub struct Layer(pub Vec<Node>);
 
 pub trait NarrowStackedExpander: Sized {
     fn new(config: Config) -> NSEResult<Self>;
