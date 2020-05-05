@@ -325,7 +325,10 @@ sha256_state sha256_update(sha256_state state, sha256_data data)
 }
 
 sha256_state sha256(sha256_data data) {
-  return sha256_update(sha256_INIT, data);
+  sha256_data padding = sha256_ZERO;
+  padding.vals[0] = 0x80000000;
+  padding.vals[15] = 512;
+  return sha256_update(sha256_update(sha256_INIT, data), padding);
 }
 
 __kernel void sha256_test(__global uint *data, __global uint *digest) {
