@@ -57,7 +57,7 @@ impl GPUContext {
         k.global_work_size([global_work_size]);
 
         // `current_layer` and `kernel_buffer` buffers are passed to
-        // all kernel calls by default, any kernel argument passed 
+        // all kernel calls by default, any kernel argument passed
         // to `call_kernel!` comes after these.
         k.arg(&self.current_layer);
         k.arg(&self.kernel_buffer);
