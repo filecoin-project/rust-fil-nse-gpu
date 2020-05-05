@@ -25,7 +25,7 @@ fn get_devices(platform_name: &str) -> GPUResult<Vec<Device>> {
 unsafe impl OclPrm for Node {}
 
 // Manages buffers
-pub struct GPUContext {
+struct GPUContext {
     pro_que: ProQue,
     current_layer: Buffer<Node>, // This has the last generated layer
     kernel_buffer: Buffer<Node>, // Kernel output always goes here (Sometimes is used as an input)

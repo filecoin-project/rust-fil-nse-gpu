@@ -4,7 +4,7 @@ mod sources;
 
 use error::*;
 use ff::Field;
-use gpu::*;
+pub use gpu::*;
 use paired::bls12_381::Fr;
 
 // TODO: Move these constants into configuration of GPU, Sealer, KeyGenerator, etc.
