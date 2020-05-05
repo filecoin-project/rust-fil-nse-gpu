@@ -129,7 +129,12 @@ impl NarrowStackedExpander for GPU {
     }
 
     fn generate_mask_layer(&mut self, replica_id: Node, window_index: usize) -> NSEResult<Layer> {
-        call_kernel!(self.context, "generate_mask", replica_id, window_index);
+        call_kernel!(
+            self.context,
+            "generate_mask",
+            replica_id,
+            window_index as u32
+        );
         let mut l = Layer(Vec::<Node>::with_capacity(self.config.n));
         self.context.pull_buffer(&mut l.0, 0)?;
         self.context.make_buffer_current();
@@ -137,7 +142,7 @@ impl NarrowStackedExpander for GPU {
     }
 
     fn generate_expander_layer(&mut self, layer_index: usize) -> NSEResult<Layer> {
-        call_kernel!(self.context, "generate_expander", layer_index);
+        call_kernel!(self.context, "generate_expander", layer_index as u32);
         let mut l = Layer(Vec::<Node>::with_capacity(self.config.n));
         self.context.pull_buffer(&mut l.0, 0)?;
         self.context.make_buffer_current();
@@ -145,7 +150,7 @@ impl NarrowStackedExpander for GPU {
     }
 
     fn generate_butterfly_layer(&mut self, layer_index: usize) -> NSEResult<Layer> {
-        call_kernel!(self.context, "generate_butterfly", layer_index);
+        call_kernel!(self.context, "generate_butterfly", layer_index as u32);
         let mut l = Layer(Vec::<Node>::with_capacity(self.config.n));
         self.context.pull_buffer(&mut l.0, 0)?;
         self.context.make_buffer_current();
