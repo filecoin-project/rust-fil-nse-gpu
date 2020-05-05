@@ -135,7 +135,7 @@ impl NarrowStackedExpander for GPU {
             replica_id,
             window_index as u32
         );
-        let mut l = Layer(Vec::<Node>::with_capacity(self.config.n));
+        let mut l = Layer(vec![Node::default(); self.config.n]);
         self.context.pull_buffer(&mut l.0, 0)?;
         self.context.make_buffer_current();
         Ok(l)
@@ -143,7 +143,7 @@ impl NarrowStackedExpander for GPU {
 
     fn generate_expander_layer(&mut self, layer_index: usize) -> NSEResult<Layer> {
         call_kernel!(self.context, "generate_expander", layer_index as u32);
-        let mut l = Layer(Vec::<Node>::with_capacity(self.config.n));
+        let mut l = Layer(vec![Node::default(); self.config.n]);
         self.context.pull_buffer(&mut l.0, 0)?;
         self.context.make_buffer_current();
         Ok(l)
@@ -151,7 +151,7 @@ impl NarrowStackedExpander for GPU {
 
     fn generate_butterfly_layer(&mut self, layer_index: usize) -> NSEResult<Layer> {
         call_kernel!(self.context, "generate_butterfly", layer_index as u32);
-        let mut l = Layer(Vec::<Node>::with_capacity(self.config.n));
+        let mut l = Layer(vec![Node::default(); self.config.n]);
         self.context.pull_buffer(&mut l.0, 0)?;
         self.context.make_buffer_current();
         Ok(l)
@@ -160,7 +160,7 @@ impl NarrowStackedExpander for GPU {
     fn combine_segment(&mut self, offset: usize, segment: &[Node]) -> NSEResult<Vec<Node>> {
         self.context.push_buffer(&segment.to_vec(), offset)?;
         call_kernel!(self.context, "combine_segment");
-        let mut l = Vec::<Node>::with_capacity(segment.len());
+        let mut l = vec![Node::default(); segment.len()];
         self.context.pull_buffer(&mut l, offset)?;
         Ok(l)
     }
