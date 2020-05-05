@@ -27,10 +27,11 @@ pub trait NarrowStackedExpander: Sized {
     fn generate_mask_layer(&mut self, replica_id: Node, window_index: usize) -> NSEResult<Layer>;
     fn generate_expander_layer(&mut self, layer_index: usize) -> NSEResult<Layer>;
     fn generate_butterfly_layer(&mut self, layer_index: usize) -> NSEResult<Layer>;
-    fn combine_layer(&self, layer: &Layer) -> NSEResult<Layer> {
+    // Combine functions need to get `&mut self`, as they modify internal state of GPU buffers
+    fn combine_layer(&mut self, layer: &Layer) -> NSEResult<Layer> {
         Ok(Layer(self.combine_segment(0, &layer.0)?))
     }
-    fn combine_segment(&self, offset: usize, segment: &[Node]) -> NSEResult<Vec<Node>>;
+    fn combine_segment(&mut self, offset: usize, segment: &[Node]) -> NSEResult<Vec<Node>>;
     fn combine_batch_size(&self) -> usize;
     fn leaf_count(&self) -> usize;
 }

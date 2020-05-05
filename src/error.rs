@@ -20,3 +20,9 @@ pub enum NSEError {
 }
 
 pub type NSEResult<T> = std::result::Result<T, NSEError>;
+
+impl From<ocl::Error> for NSEError {
+    fn from(error: ocl::Error) -> Self {
+        NSEError::GPU(GPUError::Ocl(error))
+    }
+}
