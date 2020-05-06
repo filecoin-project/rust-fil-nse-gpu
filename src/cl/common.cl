@@ -1,10 +1,7 @@
-#define DEGREE_EXPANDER (384)
-#define K (8)
-#define BIT_SIZE (24)
+#define HASH_SIZE (256)
 #define BITS_PER_BYTE (8)
 #define BYTE_SIZE (BIT_SIZE / BITS_PER_BYTE)
-#define HASH_SIZE (256)
-#define STREAM_HASH_COUNT (DEGREE_EXPANDER * BIT_SIZE / HASH_SIZE) // 36
+#define STREAM_HASH_COUNT (DEGREE_EXPANDER * BIT_SIZE / HASH_SIZE)
 
 // We are going to generate and store the entire bit-stream per node
 // before running the expander algorithm. Is this a good idea?

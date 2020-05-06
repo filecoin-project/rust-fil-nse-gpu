@@ -25,24 +25,24 @@ unsafe impl OclPrm for Node {}
 // Manages buffers
 struct GPUContext {
     pro_que: ProQue,
-    node_count: usize,
+    config: Config,
     current_layer: Buffer<Node>, // This has the last generated layer
     kernel_buffer: Buffer<Node>, // Kernel output always goes here (Sometimes is used as an input)
 }
 
 impl GPUContext {
-    pub fn new(device: Device, node_count: usize) -> GPUResult<GPUContext> {
-        let code = sources::generate_nse_program();
+    pub fn new(device: Device, config: Config) -> GPUResult<GPUContext> {
+        let code = sources::generate_nse_program(config);
         let pro_que = ProQue::builder()
             .device(device)
             .src(code)
-            .dims(node_count)
+            .dims(config.n)
             .build()?;
         let current_layer = pro_que.create_buffer::<Node>()?;
         let kernel_buffer = pro_que.create_buffer::<Node>()?;
         Ok(GPUContext {
             pro_que,
-            node_count,
+            config,
             current_layer,
             kernel_buffer,
         })
@@ -50,7 +50,7 @@ impl GPUContext {
 
     pub(crate) fn build_kernel(&mut self, kernel_name: &str) -> KernelBuilder {
         let mut k = self.pro_que.kernel_builder(kernel_name);
-        k.global_work_size([self.node_count]);
+        k.global_work_size([self.config.n]);
 
         // `current_layer` and `kernel_buffer` buffers are passed to
         // all kernel calls by default, any kernel argument passed
@@ -118,7 +118,7 @@ impl NarrowStackedExpander for GPU {
             .expect("GPU not found!");
 
         Ok(GPU {
-            context: GPUContext::new(device, config.n)?,
+            context: GPUContext::new(device, config)?,
             combine_batch_size: COMBINE_BATCH_SIZE,
             config,
         })
