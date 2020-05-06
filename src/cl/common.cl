@@ -53,3 +53,19 @@ uint get_expanded_parent(bit_stream *stream, uint i) {
   // Return Parent_x(node) * K + offset
   return get_parent(stream, x) * K + offset;
 }
+
+sha256_data Fr_to_sha256_data(Fr a, Fr b) {
+  sha256_data data;
+  for(uint i = 0; i < Fr_LIMBS; i++) {
+    data.vals[i] = a.val[i];
+    data.vals[i + Fr_LIMBS] = b.val[i];
+  }
+  return data;
+}
+
+Fr sha256_state_to_Fr(sha256_state state) {
+  Fr f;
+  for(uint i = 0; i < Fr_LIMBS; i++) f.val[i] = state.vals[i];
+  f.val[15] = (f.val[15] << 2) >> 2; // Zeroing out last two bits
+  return f;
+}
