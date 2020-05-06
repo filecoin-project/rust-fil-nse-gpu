@@ -15,13 +15,15 @@ fn config(conf: Config) -> String {
          #define K ({})
          #define DEGREE_EXPANDER ({})
          #define DEGREE_BUTTERFLY ({})
+         #define LOG2_DEGREE_BUTTERFLY ({})
          #define NUM_EXPANDER_LAYERS ({})
-         #define NUM_BUTTERFLY_LAYER ({})
+         #define NUM_BUTTERFLY_LAYERS ({})
          #define BIT_SIZE ({})\n",
         conf.n,
         conf.k,
         conf.degree_expander,
         conf.degree_butterfly,
+        (conf.degree_butterfly as f64).log2() as u32,
         conf.num_expander_layers,
         conf.num_butterfly_layers,
         24
