@@ -13,8 +13,8 @@ __kernel void generate_butterfly(__global Fr *input,
     uint i_1 = i * 2;
     uint i_2 = i * 2 + 1;
 
-    uint parent_1 = (v + i * factor) & MODULO_N_MASK;
-    uint parent_2 = (v + i * factor) & MODULO_N_MASK;
+    uint parent_1 = (v + i_1 * factor) & MODULO_N_MASK;
+    uint parent_2 = (v + i_2 * factor) & MODULO_N_MASK;
 
     state = sha256_update(state, Fr_to_sha256_data(input[parent_1], input[parent_2]));
   }
