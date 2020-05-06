@@ -77,12 +77,15 @@ __kernel void generate_expander(__global Fr *input,
   sha256_data data = sha256_ZERO;
 
   for(uint i = 0; i < DEGREE_EXPANDER / 2; i++) {
+    uint i_1 = i * 2;
+    uint i_2 = i * 2 + 1;
+
     Fr x_1 = Fr_ZERO;
     Fr x_2 = Fr_ZERO;
 
     for(uint j = 0; j < K; j++) {
-      uint parent_1 = get_expanded_parent(&stream, (i * 2) + j * DEGREE_EXPANDER);
-      uint parent_2 = get_expanded_parent(&stream, (i * 2 + 1) + j * DEGREE_EXPANDER);
+      uint parent_1 = get_expanded_parent(&stream, i_1 + j * DEGREE_EXPANDER);
+      uint parent_2 = get_expanded_parent(&stream, i_2 + j * DEGREE_EXPANDER);
 
       x_1 = Fr_add(x_1, input[parent_1]);
       x_2 = Fr_add(x_2, input[parent_2]);
