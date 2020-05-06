@@ -4,8 +4,6 @@ use super::{
 use ocl::builders::KernelBuilder;
 use ocl::{Buffer, Device, OclPrm, Platform, ProQue};
 
-const GLOBAL_WORK_SIZE: usize = 2048;
-
 const GPU_NVIDIA_PLATFORM_NAME: &str = "NVIDIA CUDA";
 
 /// Gets list of devices by platform name
@@ -27,6 +25,7 @@ unsafe impl OclPrm for Node {}
 // Manages buffers
 struct GPUContext {
     pro_que: ProQue,
+    node_count: usize,
     current_layer: Buffer<Node>, // This has the last generated layer
     kernel_buffer: Buffer<Node>, // Kernel output always goes here (Sometimes is used as an input)
 }
@@ -43,18 +42,15 @@ impl GPUContext {
         let kernel_buffer = pro_que.create_buffer::<Node>()?;
         Ok(GPUContext {
             pro_que,
+            node_count,
             current_layer,
             kernel_buffer,
         })
     }
 
-    pub(crate) fn build_kernel(
-        &mut self,
-        global_work_size: usize,
-        kernel_name: &str,
-    ) -> KernelBuilder {
+    pub(crate) fn build_kernel(&mut self, kernel_name: &str) -> KernelBuilder {
         let mut k = self.pro_que.kernel_builder(kernel_name);
-        k.global_work_size([global_work_size]);
+        k.global_work_size([self.node_count]);
 
         // `current_layer` and `kernel_buffer` buffers are passed to
         // all kernel calls by default, any kernel argument passed
@@ -90,7 +86,7 @@ macro_rules! call_kernel {
     ($ctx:expr, $name:expr) => {{
         let kernel =
             $ctx
-            .build_kernel(GLOBAL_WORK_SIZE, $name)
+            .build_kernel($name)
             .build()?;
         unsafe {
             kernel.enq()?;
@@ -99,7 +95,7 @@ macro_rules! call_kernel {
     ($ctx:expr, $name:expr, $($arg:expr),+) => {{
         let kernel =
             $ctx
-            .build_kernel(GLOBAL_WORK_SIZE, $name)
+            .build_kernel($name)
             $(.arg($arg))*
             .build()?;
         unsafe {
