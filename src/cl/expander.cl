@@ -49,27 +49,6 @@ uint get_expanded_parent(bit_stream *stream, uint i) {
   return get_parent(stream, x) * K + offset;
 }
 
-sha256_data Fr_to_sha256_data(Fr a, Fr b) {
-  sha256_data data;
-  for(uint i = 0; i < Fr_LIMBS; i++) {
-    data.vals[2 * i] = a.val[i] & 0xffffffff;
-    data.vals[2 * i + 1] = a.val[i] >> 32;
-    data.vals[2 * (i + Fr_LIMBS)] = b.val[i] & 0xffffffff;
-    data.vals[2 * (i + Fr_LIMBS) + 1] = b.val[i] >> 32;
-  }
-  return data;
-}
-
-Fr sha256_state_to_Fr(sha256_state state) {
-  Fr f;
-  for(uint i = 0; i < Fr_LIMBS; i++)
-    f.val[i] = (state.vals[2 * i + 1] << 32) + state.vals[2 * i];
-  // Zeroing out last two bits
-  f.val[Fr_LIMBS - 1] <<= 2;
-  f.val[Fr_LIMBS - 1] >>= 2;
-  return f;
-}
-
 __kernel void generate_expander(__global Fr *input,
                                 __global Fr *output,
                                 uint layer_index) {
