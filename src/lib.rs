@@ -20,11 +20,24 @@ impl Default for Node {
     }
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub struct Sha256Domain(pub [u8; 32]);
+
+impl Default for Sha256Domain {
+    fn default() -> Self {
+        Self([0u8; 32])
+    }
+}
+
 pub struct Layer(pub Vec<Node>);
 
 pub trait NarrowStackedExpander: Sized {
     fn new(config: Config) -> NSEResult<Self>;
-    fn generate_mask_layer(&mut self, replica_id: Node, window_index: usize) -> NSEResult<Layer>;
+    fn generate_mask_layer(
+        &mut self,
+        replica_id: Sha256Domain,
+        window_index: usize,
+    ) -> NSEResult<Layer>;
     fn generate_expander_layer(&mut self, layer_index: usize) -> NSEResult<Layer>;
     fn generate_butterfly_layer(&mut self, layer_index: usize) -> NSEResult<Layer>;
     // Combine functions need to get `&mut self`, as they modify internal state of GPU buffers
@@ -65,7 +78,7 @@ impl Sealer {
     #[allow(dead_code)]
     fn new(
         config: Config,
-        replica_id: Node,
+        replica_id: Sha256Domain,
         window_index: usize,
         original_data: Layer,
         gpu: GPU,
@@ -114,14 +127,19 @@ pub struct Unsealer {
 impl Unsealer {}
 
 pub struct KeyGenerator {
-    replica_id: Node,
+    replica_id: Sha256Domain,
     window_index: usize,
     current_layer_index: usize,
     gpu: GPU,
 }
 
 impl KeyGenerator {
-    fn new(config: Config, replica_id: Node, window_index: usize, gpu: GPU) -> NSEResult<Self> {
+    fn new(
+        config: Config,
+        replica_id: Sha256Domain,
+        window_index: usize,
+        gpu: GPU,
+    ) -> NSEResult<Self> {
         assert_eq!(config.n, gpu.leaf_count() * std::mem::size_of::<Node>());
         Ok(Self {
             replica_id,

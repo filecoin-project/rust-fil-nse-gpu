@@ -1,5 +1,6 @@
 use super::{
-    sources, Config, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node, COMBINE_BATCH_SIZE,
+    sources, Config, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node, Sha256Domain,
+    COMBINE_BATCH_SIZE,
 };
 use ocl::builders::KernelBuilder;
 use ocl::{Buffer, Device, OclPrm, Platform, ProQue};
@@ -21,6 +22,7 @@ fn get_devices(platform_name: &str) -> GPUResult<Vec<Device>> {
 
 // Make `Node` movable to GPU buffers by implementing `OclPrm`
 unsafe impl OclPrm for Node {}
+unsafe impl OclPrm for Sha256Domain {}
 
 // Manages buffers
 struct GPUContext {
@@ -124,7 +126,11 @@ impl NarrowStackedExpander for GPU {
         })
     }
 
-    fn generate_mask_layer(&mut self, replica_id: Node, window_index: usize) -> NSEResult<Layer> {
+    fn generate_mask_layer(
+        &mut self,
+        replica_id: Sha256Domain,
+        window_index: usize,
+    ) -> NSEResult<Layer> {
         call_kernel!(
             self.context,
             "generate_mask",

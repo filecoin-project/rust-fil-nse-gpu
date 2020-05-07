@@ -7,12 +7,14 @@ uint reverse_bytes(uint a) {
          (a & 0x00ff0000) >> 8 | (a & 0xff000000) >> 24;
 }
 
-sha256_data hash_prefix(uint layer_index, uint node_index, uint window_index, Fr replica_id) {
+sha256_data hash_prefix(uint layer_index, uint node_index, uint window_index, sha256_state replica_id) {
   sha256_data data = sha256_ZERO;
   data.vals[0] = layer_index;
   data.vals[1] = node_index;
   data.vals[2] = window_index;
-  // TODO: Fill `data[8:]`` with `replica_id`
+  for(uint i = 0; i < 8; i++) {
+    data.vals[8 + i] = replica_id.vals[i];
+  }
   return data;
 }
 

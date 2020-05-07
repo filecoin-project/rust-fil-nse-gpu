@@ -1,6 +1,6 @@
 __kernel void generate_mask(__global Fr *_,
                             __global Fr *output,
-                            Fr replica_id,
+                            sha256_state replica_id,
                             uint window_index) {
 
   uint node_index = get_global_id(0); // Nodes are processed in parallel
