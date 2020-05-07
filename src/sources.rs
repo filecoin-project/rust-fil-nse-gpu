@@ -28,7 +28,7 @@ fn config(conf: Config) -> String {
         (conf.degree_butterfly as f64).log2() as u32,
         conf.num_expander_layers,
         conf.num_butterfly_layers,
-        24
+        (conf.n as f64 / conf.k as f64).log2() as u32
     )
 }
 
