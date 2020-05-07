@@ -13,6 +13,7 @@ fn config(conf: Config) -> String {
     format!(
         "#define N ({})
          #define K ({})
+         #define LOG2_K ({})
          #define DEGREE_EXPANDER ({})
          #define DEGREE_BUTTERFLY ({})
          #define LOG2_DEGREE_BUTTERFLY ({})
@@ -21,6 +22,7 @@ fn config(conf: Config) -> String {
          #define BIT_SIZE ({})\n",
         conf.n,
         conf.k,
+        (conf.k as f64).log2() as u32,
         conf.degree_expander,
         conf.degree_butterfly,
         (conf.degree_butterfly as f64).log2() as u32,

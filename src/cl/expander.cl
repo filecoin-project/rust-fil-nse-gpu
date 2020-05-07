@@ -42,8 +42,8 @@ uint get_expanded_parent(bit_stream *stream, uint i) {
 
   // `i`th expanded parent of node is equal with:
   // `i / K`th non-expanded parent of node plus `i % K`
-  uint x = i / K;
-  uint offset = i % K; // Or `i - K * x` if faster
+  uint x = i >> LOG2_K; // i / K
+  uint offset = i & (K - 1); // i % K
 
   // Return Parent_x(node) * K + offset
   return get_parent(stream, x) * K + offset;
