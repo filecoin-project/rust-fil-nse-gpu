@@ -7,7 +7,6 @@ __kernel void generate_butterfly(__global Fr *input,
   uint factor = 1 << (LOG2_DEGREE_BUTTERFLY * (NUM_LAYERS - layer_index));
 
   sha256_state state = sha256_INIT;
-  sha256_data data = sha256_ZERO;
 
   for(uint i = 0; i < DEGREE_BUTTERFLY / 2; i++) {
     uint i_1 = i * 2;
