@@ -1,13 +1,13 @@
 typedef struct {
   uint vals[8];
-} sha256_state;
+} sha256_domain;
 
 typedef struct {
   uint vals[16];
-} sha256_data;
+} sha256_block;
 
-#define sha256_ZERO ((sha256_data){{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}})
-#define sha256_INIT ((sha256_state){{0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19}})
+#define sha256_ZERO ((sha256_block){{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}})
+#define sha256_INIT ((sha256_domain){{0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19}})
 #define sha256_BITS (256)
 
 __constant uint SHA256_K[64] =
@@ -38,7 +38,7 @@ __constant uint SHA256_K[64] =
 #define s0I(x) ((uint)rotate((uint)x,(uint)25) ^ (uint)rotate((uint)x,(uint)14) ^ (x>>3))
 #define s1I(x) ((uint)rotate((uint)x,(uint)15) ^ (uint)rotate((uint)x,(uint)13) ^ (x>>10))
 
-sha256_state sha256_update(sha256_state state, sha256_data data)
+sha256_domain sha256_update(sha256_domain state, sha256_block data)
 {
 	uint W00,W01,W02,W03,W04,W05,W06,W07;
 	uint W08,W09,W10,W11,W12,W13,W14,W15;
@@ -327,22 +327,22 @@ sha256_state sha256_update(sha256_state state, sha256_data data)
 
 // Apply sha256 padding
 // * `blocks` - Number of data blocks (Before padding)
-sha256_state sha256_finish(sha256_state state, uint blocks) {
-  sha256_data padding = sha256_ZERO;
+sha256_domain sha256_finish(sha256_domain state, uint blocks) {
+  sha256_block padding = sha256_ZERO;
   padding.vals[0] = 0x80000000;
   padding.vals[15] = 512 * blocks;
   return sha256_update(state, padding);
 }
 
-sha256_state sha256(sha256_data data) {
+sha256_domain sha256(sha256_block data) {
   return sha256_finish(sha256_update(sha256_INIT, data), 1);
 }
 
 __kernel void sha256_test(__global uint *data, __global uint *digest) {
-  sha256_data dat = sha256_ZERO;
+  sha256_block dat = sha256_ZERO;
   for(uint i = 0; i < 16; i++)
     dat.vals[i] = data[i];
-  sha256_state s = sha256(dat);
+  sha256_domain s = sha256(dat);
   for(uint i = 0; i < 8; i++)
     digest[i] = s.vals[i];
 }

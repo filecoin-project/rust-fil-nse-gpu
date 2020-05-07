@@ -7,8 +7,8 @@ uint reverse_bytes(uint a) {
          (a & 0x00ff0000) >> 8 | (a & 0xff000000) >> 24;
 }
 
-sha256_data hash_prefix(uint layer_index, uint node_index, uint window_index, sha256_state replica_id) {
-  sha256_data data = sha256_ZERO;
+sha256_block hash_prefix(uint layer_index, uint node_index, uint window_index, sha256_domain replica_id) {
+  sha256_block data = sha256_ZERO;
   data.vals[0] = layer_index;
   data.vals[1] = node_index;
   data.vals[2] = window_index;
@@ -18,8 +18,8 @@ sha256_data hash_prefix(uint layer_index, uint node_index, uint window_index, sh
   return data;
 }
 
-sha256_data Fr_to_sha256_data(Fr a, Fr b) {
-  sha256_data data;
+sha256_block Fr_to_sha256_block(Fr a, Fr b) {
+  sha256_block data;
   a = Fr_unmont(a);
   b = Fr_unmont(b);
   for(uint i = 0; i < Fr_LIMBS; i++) {
@@ -31,7 +31,7 @@ sha256_data Fr_to_sha256_data(Fr a, Fr b) {
   return data;
 }
 
-Fr sha256_state_to_Fr(sha256_state state) {
+Fr sha256_domain_to_Fr(sha256_domain state) {
   Fr f;
   for(uint i = 0; i < Fr_LIMBS; i++)
     f.val[i] = ((limb)reverse_bytes(state.vals[2 * i + 1]) << 32) + reverse_bytes(state.vals[2 * i]);

@@ -5,12 +5,12 @@
 // before running the expander algorithm. Is this a good idea?
 // (bit-stream per node is around ~1KB in size)
 typedef struct {
-  sha256_state bit_source[STREAM_HASH_COUNT];
+  sha256_domain bit_source[STREAM_HASH_COUNT];
 } bit_stream;
 
 bit_stream gen_stream(uint node) {
   bit_stream stream;
-  sha256_data data = sha256_ZERO;
+  sha256_block data = sha256_ZERO;
   data.vals[0] = node;
   for(uint i = 0; i < STREAM_HASH_COUNT; i++) {
     data.vals[1] = i;
@@ -51,7 +51,7 @@ uint get_expanded_parent(bit_stream *stream, uint i) {
 
 __kernel void generate_expander(__global Fr *input,
                                 __global Fr *output,
-                                sha256_state replica_id,
+                                sha256_domain replica_id,
                                 uint window_index,
                                 uint layer_index) {
 
@@ -59,7 +59,7 @@ __kernel void generate_expander(__global Fr *input,
 
   bit_stream stream = gen_stream(node); // 1152 Bytes ~ 1KB
 
-  sha256_state state = sha256_INIT;
+  sha256_domain state = sha256_INIT;
 
   for(uint i = 0; i < DEGREE_EXPANDER / 2; i++) {
     uint i_1 = i * 2;
@@ -76,10 +76,10 @@ __kernel void generate_expander(__global Fr *input,
       x_2 = Fr_add(x_2, input[parent_2]);
     }
 
-    state = sha256_update(state, Fr_to_sha256_data(x_1, x_2));
+    state = sha256_update(state, Fr_to_sha256_block(x_1, x_2));
   }
 
   state = sha256_finish(state, DEGREE_EXPANDER / 2);
 
-  output[node] = sha256_state_to_Fr(state);
+  output[node] = sha256_domain_to_Fr(state);
 }
