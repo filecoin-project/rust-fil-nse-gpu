@@ -51,10 +51,15 @@ pub trait NarrowStackedExpander: Sized {
         layer_index: usize,
     ) -> NSEResult<Layer>;
     // Combine functions need to get `&mut self`, as they modify internal state of GPU buffers
-    fn combine_layer(&mut self, layer: &Layer) -> NSEResult<Layer> {
-        Ok(Layer(self.combine_segment(0, &layer.0)?))
+    fn combine_layer(&mut self, layer: &Layer, is_decode: bool) -> NSEResult<Layer> {
+        Ok(Layer(self.combine_segment(0, &layer.0, is_decode)?))
     }
-    fn combine_segment(&mut self, offset: usize, segment: &[Node]) -> NSEResult<Vec<Node>>;
+    fn combine_segment(
+        &mut self,
+        offset: usize,
+        segment: &[Node],
+        is_decode: bool,
+    ) -> NSEResult<Vec<Node>>;
     fn combine_batch_size(&self) -> usize;
     fn leaf_count(&self) -> usize;
 }
@@ -110,7 +115,7 @@ impl Iterator for Sealer {
                 Some(
                     // TODO: Remove `unwrap()`, handle errors
                     self.key_generator
-                        .combine_layer(&self.original_data)
+                        .combine_layer(&self.original_data, true)
                         .unwrap(),
                 )
             } else {
@@ -190,8 +195,8 @@ impl KeyGenerator {
         )
     }
 
-    fn combine_layer(&mut self, layer: &Layer) -> NSEResult<Layer> {
-        self.gpu.combine_layer(layer)
+    fn combine_layer(&mut self, layer: &Layer, is_decode: bool) -> NSEResult<Layer> {
+        self.gpu.combine_layer(layer, is_decode)
     }
 }
 

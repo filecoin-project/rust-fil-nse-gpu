@@ -181,9 +181,20 @@ impl NarrowStackedExpander for GPU {
         Ok(l)
     }
 
-    fn combine_segment(&mut self, offset: usize, segment: &[Node]) -> NSEResult<Vec<Node>> {
+    fn combine_segment(
+        &mut self,
+        offset: usize,
+        segment: &[Node],
+        is_decode: bool,
+    ) -> NSEResult<Vec<Node>> {
         self.context.push_buffer(&segment.to_vec(), offset)?;
-        call_kernel!(self.context, "combine_segment");
+        call_kernel!(
+            self.context,
+            "combine_segment",
+            offset as u32,
+            segment.len() as u32,
+            is_decode as u32
+        );
         let mut l = vec![Node::default(); segment.len()];
         self.context.pull_buffer(&mut l, offset)?;
         Ok(l)
