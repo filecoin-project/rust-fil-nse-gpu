@@ -80,7 +80,7 @@ __kernel void generate_expander(__global Fr *input,
     state = sha256_update(state, Fr_to_sha256_block(x_1, x_2));
   }
 
-  state = sha256_finish(state, DEGREE_EXPANDER / 2);
+  state = sha256_finish(state, DEGREE_EXPANDER / 2 + 1);
 
   output[node] = sha256_domain_to_Fr(state);
 }
