@@ -38,8 +38,18 @@ pub trait NarrowStackedExpander: Sized {
         replica_id: Sha256Domain,
         window_index: usize,
     ) -> NSEResult<Layer>;
-    fn generate_expander_layer(&mut self, layer_index: usize) -> NSEResult<Layer>;
-    fn generate_butterfly_layer(&mut self, layer_index: usize) -> NSEResult<Layer>;
+    fn generate_expander_layer(
+        &mut self,
+        replica_id: Sha256Domain,
+        window_index: usize,
+        layer_index: usize,
+    ) -> NSEResult<Layer>;
+    fn generate_butterfly_layer(
+        &mut self,
+        replica_id: Sha256Domain,
+        window_index: usize,
+        layer_index: usize,
+    ) -> NSEResult<Layer>;
     // Combine functions need to get `&mut self`, as they modify internal state of GPU buffers
     fn combine_layer(&mut self, layer: &Layer) -> NSEResult<Layer> {
         Ok(Layer(self.combine_segment(0, &layer.0)?))
@@ -165,11 +175,19 @@ impl KeyGenerator {
 
     // Generate expander layer on GPU, using previous layer already loaded.
     fn generate_expander_layer(&mut self) -> NSEResult<Layer> {
-        self.gpu.generate_expander_layer(self.current_layer_index)
+        self.gpu.generate_expander_layer(
+            self.replica_id,
+            self.window_index,
+            self.current_layer_index,
+        )
     }
     // Generate butterfly layer on GPU, using previous layer already loaded.
     fn generate_butterfly_layer(&mut self) -> NSEResult<Layer> {
-        self.gpu.generate_expander_layer(self.current_layer_index)
+        self.gpu.generate_expander_layer(
+            self.replica_id,
+            self.window_index,
+            self.current_layer_index,
+        )
     }
 
     fn combine_layer(&mut self, layer: &Layer) -> NSEResult<Layer> {

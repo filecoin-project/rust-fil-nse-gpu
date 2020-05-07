@@ -1,5 +1,7 @@
 __kernel void generate_butterfly(__global Fr *input,
                                  __global Fr *output,
+                                 sha256_state replica_id,
+                                 uint window_index,
                                  uint layer_index) {
 
   uint v = get_global_id(0); // Nodes are processed in parallel

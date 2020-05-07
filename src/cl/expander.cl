@@ -51,6 +51,8 @@ uint get_expanded_parent(bit_stream *stream, uint i) {
 
 __kernel void generate_expander(__global Fr *input,
                                 __global Fr *output,
+                                sha256_state replica_id,
+                                uint window_index,
                                 uint layer_index) {
 
   uint node = get_global_id(0); // Nodes are processed in parallel
