@@ -19,7 +19,7 @@ __kernel void generate_butterfly(__global Fr *input,
     state = sha256_update(state, Fr_to_sha256_data(input[parent_1], input[parent_2]));
   }
 
-  state = sha256_finish(state, DEGREE_EXPANDER / 2);
+  state = sha256_finish(state, DEGREE_BUTTERFLY / 2);
 
   output[v] = sha256_state_to_Fr(state);
 }
