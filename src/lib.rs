@@ -90,8 +90,7 @@ pub struct Sealer {
 }
 
 impl Sealer {
-    #[allow(dead_code)]
-    fn new(
+    pub fn new(
         config: Config,
         replica_id: Sha256Domain,
         window_index: usize,
