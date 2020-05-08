@@ -29,7 +29,7 @@ impl Default for Sha256Domain {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Layer(pub Vec<Node>);
 
 pub trait NarrowStackedExpander: Sized {
@@ -280,4 +280,43 @@ impl ExactSizeIterator for KeyGenerator {
     fn len(&self) -> usize {
         self.config().num_expander_layers + self.config().num_butterfly_layers
     }
+}
+
+#[test]
+fn test_sealer_unsealer_consistency() {
+    let num_nodes_window = 1 << 10;
+
+    let original_data = Layer(vec![Node::default(); num_nodes_window]);
+
+    let config = Config {
+        k: 4,
+        num_nodes_window: num_nodes_window,
+        degree_expander: 384,
+        degree_butterfly: 16,
+        num_expander_layers: 8,
+        num_butterfly_layers: 7,
+    };
+    
+    let gpu = GPU::new(config).unwrap();
+    let replica_id = Sha256Domain([123u8; 32]);
+    let window_index = 1234567890;
+
+    let sealer = Sealer::new(config, replica_id, window_index, original_data.clone(), gpu).unwrap();
+    let mut sealed_layers = Vec::new();
+    for l in sealer {
+        sealed_layers.push(l);
+    }
+
+    let sealed_data = sealed_layers.last().unwrap().clone();
+
+    let gpu = GPU::new(config).unwrap();
+    let unsealer = Unsealer::new(config, replica_id, window_index, sealed_data, gpu).unwrap();
+    let mut unsealed_layers = Vec::new();
+    for l in unsealer {
+        unsealed_layers.push(l);
+    }
+
+    let unsealed_data = unsealed_layers.last().unwrap().clone();
+
+    assert_eq!(unsealed_data, original_data);
 }
