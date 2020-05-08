@@ -235,7 +235,7 @@ impl KeyGenerator {
     }
     // Generate butterfly layer on GPU, using previous layer already loaded.
     fn generate_butterfly_layer(&mut self) -> NSEResult<Layer> {
-        self.gpu.generate_expander_layer(
+        self.gpu.generate_butterfly_layer(
             self.replica_id,
             self.window_index,
             self.current_layer_index,
