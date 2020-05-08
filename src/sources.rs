@@ -10,6 +10,13 @@ static BUTTERFLY_SRC: &str = include_str!("cl/butterfly.cl");
 static COMBINE_SRC: &str = include_str!("cl/combine.cl");
 
 fn config(conf: Config) -> String {
+    assert!(conf.num_nodes_window > conf.k as usize);
+    assert!(conf.num_nodes_window.count_ones() == 1);
+    assert!(conf.k.count_ones() == 1);
+    let bit_size = (conf.num_nodes_window as f64 / conf.k as f64).log2() as u32;
+    assert!(bit_size % 8 == 0);
+    assert!(conf.degree_butterfly.count_ones() == 1);
+
     format!(
         "#define N ({})
          #define K ({})
@@ -28,7 +35,7 @@ fn config(conf: Config) -> String {
         (conf.degree_butterfly as f64).log2() as u32,
         conf.num_expander_layers,
         conf.num_butterfly_layers,
-        (conf.num_nodes_window as f64 / conf.k as f64).log2() as u32
+        bit_size,
     )
 }
 
