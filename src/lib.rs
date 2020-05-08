@@ -6,6 +6,7 @@ use error::*;
 use ff::Field;
 pub use gpu::*;
 use paired::bls12_381::Fr;
+use rand::RngCore;
 
 // TODO: Move these constants into configuration of GPU, Sealer, KeyGenerator, etc.
 const COMBINE_BATCH_SIZE: usize = 500000;
@@ -13,6 +14,12 @@ const COMBINE_BATCH_SIZE: usize = 500000;
 #[derive(PartialEq, Debug, Clone, Copy)]
 #[repr(transparent)]
 pub struct Node(pub Fr);
+
+impl Node {
+    pub fn random<R: RngCore>(rng: &mut R) -> Self {
+        Node(Fr::random(rng))
+    }
+}
 
 impl Default for Node {
     fn default() -> Self {
@@ -284,9 +291,15 @@ impl ExactSizeIterator for KeyGenerator {
 
 #[test]
 fn test_sealer_unsealer_consistency() {
-    let num_nodes_window = 1 << 10;
+    use rand::thread_rng;
 
-    let original_data = Layer(vec![Node::default(); num_nodes_window]);
+    let num_nodes_window = 1 << 10;
+    let mut rng = thread_rng();
+    let original_data = Layer(
+        (0..num_nodes_window)
+            .map(|_| Node::random(&mut rng))
+            .collect(),
+    );
 
     let config = Config {
         k: 4,
@@ -296,7 +309,7 @@ fn test_sealer_unsealer_consistency() {
         num_expander_layers: 8,
         num_butterfly_layers: 7,
     };
-    
+
     let gpu = GPU::new(config).unwrap();
     let replica_id = Sha256Domain([123u8; 32]);
     let window_index = 1234567890;
