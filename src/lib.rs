@@ -29,6 +29,7 @@ impl Default for Sha256Domain {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Layer(pub Vec<Node>);
 
 pub trait NarrowStackedExpander: Sized {
