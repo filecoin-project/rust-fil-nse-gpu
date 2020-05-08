@@ -114,7 +114,7 @@ impl Iterator for Sealer {
                 Some(
                     // TODO: Remove `unwrap()`, handle errors
                     self.key_generator
-                        .combine_layer(&self.original_data, true)
+                        .combine_layer(&self.original_data, false)
                         .unwrap(),
                 )
             } else {
@@ -132,13 +132,53 @@ impl ExactSizeIterator for Sealer {
     }
 }
 
-#[allow(dead_code)]
 pub struct Unsealer {
+    sealed_data: Layer,
     key_generator: KeyGenerator,
 }
 
-// FIXME/TODO
-impl Unsealer {}
+impl Unsealer {
+    pub fn new(
+        config: Config,
+        replica_id: Sha256Domain,
+        window_index: usize,
+        sealed_data: Layer,
+        gpu: GPU,
+    ) -> NSEResult<Self> {
+        Ok(Self {
+            sealed_data,
+            key_generator: KeyGenerator::new(config, replica_id, window_index, gpu)?,
+        })
+    }
+}
+
+impl Iterator for Unsealer {
+    type Item = Layer;
+
+    /// Returns successive layers, starting with mask layer, and ending with sealed replica layer.
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(next_key_layer) = self.key_generator.next() {
+            if self.key_generator.layers_remaining() == 0 {
+                Some(
+                    // TODO: Remove `unwrap()`, handle errors
+                    self.key_generator
+                        .combine_layer(&self.sealed_data, true)
+                        .unwrap(),
+                )
+            } else {
+                Some(next_key_layer)
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl ExactSizeIterator for Unsealer {
+    fn len(&self) -> usize {
+        self.key_generator.len()
+    }
+}
 
 pub struct KeyGenerator {
     replica_id: Sha256Domain,
