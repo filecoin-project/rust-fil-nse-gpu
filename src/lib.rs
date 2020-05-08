@@ -72,8 +72,8 @@ pub trait NarrowStackedExpander: Sized {
 pub struct Config {
     /// Batch hashing factor.
     pub k: u32,
-    /// Window size in bytes.
-    pub n: usize,
+    /// Number of nodes per window
+    pub num_nodes_window: usize,
     /// Degree of the expander graph.
     pub degree_expander: usize,
     /// Degree of the butterfly graph.
@@ -155,7 +155,7 @@ impl KeyGenerator {
         window_index: usize,
         gpu: GPU,
     ) -> NSEResult<Self> {
-        assert_eq!(config.n, gpu.leaf_count() * std::mem::size_of::<Node>());
+        assert_eq!(config.num_nodes_window, gpu.leaf_count());
         Ok(Self {
             replica_id,
             window_index,

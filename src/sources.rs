@@ -20,7 +20,7 @@ fn config(conf: Config) -> String {
          #define NUM_EXPANDER_LAYERS ({})
          #define NUM_BUTTERFLY_LAYERS ({})
          #define BIT_SIZE ({})\n",
-        conf.n,
+        conf.num_nodes_window,
         conf.k,
         (conf.k as f64).log2() as u32,
         conf.degree_expander,
@@ -28,7 +28,7 @@ fn config(conf: Config) -> String {
         (conf.degree_butterfly as f64).log2() as u32,
         conf.num_expander_layers,
         conf.num_butterfly_layers,
-        (conf.n as f64 / conf.k as f64).log2() as u32
+        (conf.num_nodes_window as f64 / conf.k as f64).log2() as u32
     )
 }
 

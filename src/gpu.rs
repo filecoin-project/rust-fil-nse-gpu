@@ -38,7 +38,7 @@ impl GPUContext {
         let pro_que = ProQue::builder()
             .device(device)
             .src(code)
-            .dims(config.n)
+            .dims(config.num_nodes_window)
             .build()?;
         let current_layer = pro_que.create_buffer::<Node>()?;
         let kernel_buffer = pro_que.create_buffer::<Node>()?;
@@ -52,7 +52,7 @@ impl GPUContext {
 
     pub(crate) fn build_kernel(&mut self, kernel_name: &str) -> KernelBuilder {
         let mut k = self.pro_que.kernel_builder(kernel_name);
-        k.global_work_size([self.config.n]);
+        k.global_work_size([self.leaf_count()]);
 
         // `current_layer` and `kernel_buffer` buffers are passed to
         // all kernel calls by default, any kernel argument passed
@@ -81,6 +81,10 @@ impl GPUContext {
             .read(segment)
             .enq()?;
         Ok(())
+    }
+
+    pub(crate) fn leaf_count(&self) -> usize {
+        self.config.num_nodes_window
     }
 }
 
@@ -137,7 +141,7 @@ impl NarrowStackedExpander for GPU {
             replica_id,
             window_index as u32
         );
-        let mut l = Layer(vec![Node::default(); self.config.n]);
+        let mut l = Layer(vec![Node::default(); self.leaf_count()]);
         self.context.pull_buffer(&mut l.0, 0)?;
         self.context.make_buffer_current();
         Ok(l)
@@ -156,7 +160,7 @@ impl NarrowStackedExpander for GPU {
             window_index as u32,
             layer_index as u32
         );
-        let mut l = Layer(vec![Node::default(); self.config.n]);
+        let mut l = Layer(vec![Node::default(); self.leaf_count()]);
         self.context.pull_buffer(&mut l.0, 0)?;
         self.context.make_buffer_current();
         Ok(l)
@@ -175,7 +179,7 @@ impl NarrowStackedExpander for GPU {
             window_index as u32,
             layer_index as u32
         );
-        let mut l = Layer(vec![Node::default(); self.config.n]);
+        let mut l = Layer(vec![Node::default(); self.leaf_count()]);
         self.context.pull_buffer(&mut l.0, 0)?;
         self.context.make_buffer_current();
         Ok(l)
@@ -205,6 +209,6 @@ impl NarrowStackedExpander for GPU {
     }
 
     fn leaf_count(&self) -> usize {
-        self.config.n
+        self.context.leaf_count()
     }
 }
