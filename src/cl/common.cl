@@ -20,8 +20,6 @@ sha256_block hash_prefix(uint layer_index, uint node_index, uint window_index, s
 
 sha256_block Fr_to_sha256_block(Fr a, Fr b) {
   sha256_block data;
-  a = Fr_unmont(a);
-  b = Fr_unmont(b);
   for(uint i = 0; i < Fr_LIMBS; i++) {
     data.vals[2 * i] = reverse_bytes(a.val[i] & 0xffffffff);
     data.vals[2 * i + 1] = reverse_bytes(a.val[i] >> 32);
@@ -38,6 +36,5 @@ Fr sha256_domain_to_Fr(sha256_domain state) {
   // Zeroing out last two bits
   f.val[Fr_LIMBS - 1] <<= 2;
   f.val[Fr_LIMBS - 1] >>= 2;
-  f = Fr_mont(f);
   return f;
 }

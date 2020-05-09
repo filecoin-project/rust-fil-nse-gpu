@@ -3,9 +3,9 @@ mod gpu;
 mod sources;
 
 use error::*;
-use ff::Field;
+use ff::{Field, PrimeField};
 pub use gpu::*;
-use paired::bls12_381::Fr;
+use paired::bls12_381::{Fr, FrRepr};
 use rand::RngCore;
 
 // TODO: Move these constants into configuration of GPU, Sealer, KeyGenerator, etc.
@@ -13,17 +13,17 @@ const COMBINE_BATCH_SIZE: usize = 500000;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 #[repr(transparent)]
-pub struct Node(pub Fr);
+pub struct Node(pub FrRepr);
 
 impl Node {
     pub fn random<R: RngCore>(rng: &mut R) -> Self {
-        Node(Fr::random(rng))
+        Node(Fr::random(rng).into_repr())
     }
 }
 
 impl Default for Node {
     fn default() -> Self {
-        Node(Fr::zero())
+        Node(Fr::zero().into_repr())
     }
 }
 
