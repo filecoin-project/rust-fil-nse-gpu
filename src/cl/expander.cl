@@ -38,16 +38,16 @@ uint get_parent(bit_stream *stream, uint i) {
 
 // Returns `i`th *expanded* parent of node
 // `i` is in the range `[0, K * EXPANDED_DEGREE)`
-// uint get_expanded_parent(bit_stream *stream, uint i) {
-//
-//   // `i`th expanded parent of node is equal with:
-//   // `i / K`th non-expanded parent of node plus `i % K`
-//   uint x = i >> LOG2_K; // i / K
-//   uint offset = i & (K - 1); // i % K
-//
-//   // Return Parent_x(node) * K + offset
-//   return get_parent(stream, x) * K + offset;
-// }
+uint get_expanded_parent(bit_stream *stream, uint i) {
+
+  // `i`th expanded parent of node is equal with:
+  // `i / K`th non-expanded parent of node plus `i % K`
+  uint x = i >> LOG2_K; // i / K
+  uint offset = i & (K - 1); // i % K
+
+  // Return Parent_x(node) * K + offset
+  return get_parent(stream, x) * K + offset;
+}
 
 __kernel void generate_expander(__global Fr *input,
                                 __global Fr *output,
@@ -70,11 +70,8 @@ __kernel void generate_expander(__global Fr *input,
     Fr x_2 = Fr_ZERO;
 
     for(uint j = 0; j < K; j++) {
-
-      // Compatible with CPU implementation
-      // Not compatible with HackMD document?
-      uint parent_1 = get_parent(&stream, i_1) * K + j;
-      uint parent_2 = get_parent(&stream, i_2) * K + j;
+      uint parent_1 = get_expanded_parent(&stream, i_1 + j * DEGREE_EXPANDER);
+      uint parent_2 = get_expanded_parent(&stream, i_2 + j * DEGREE_EXPANDER);
 
       x_1 = Fr_add(x_1, input[parent_1]);
       x_2 = Fr_add(x_2, input[parent_2]);
