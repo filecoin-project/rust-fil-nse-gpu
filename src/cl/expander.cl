@@ -20,8 +20,7 @@ bit_stream gen_stream(uint node) {
 }
 
 uchar get_byte(bit_stream *stream, uint i) {
-  i = (i & 0xfffffffc) + (3 - (i & 3)); // Change endianness
-  return ((uchar*)stream)[i];
+  return ((uchar*)stream)[i ^ 3]; // `i ^ 3` => Change endianness of uint bytes
 }
 
 // Get `i`th chunk of bitstream (chunks are `BIT_SIZE` long)
