@@ -6,7 +6,7 @@ use error::*;
 use ff::{Field, PrimeField};
 pub use gpu::*;
 use paired::bls12_381::{Fr, FrRepr};
-use rand::RngCore;
+use rand::{Rng, RngCore};
 
 // TODO: Move these constants into configuration of GPU, Sealer, KeyGenerator, etc.
 const COMBINE_BATCH_SIZE: usize = 500000;
@@ -36,8 +36,20 @@ impl Default for Sha256Domain {
     }
 }
 
+impl Sha256Domain {
+    pub fn random<R: RngCore>(rng: &mut R) -> Self {
+        Sha256Domain(rng.gen())
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub struct Layer(pub Vec<Node>);
+
+impl Layer {
+    pub fn random<R: RngCore>(rng: &mut R, node_count: usize) -> Self {
+        Layer((0..node_count).map(|_| Node::random(rng)).collect())
+    }
+}
 
 pub trait NarrowStackedExpander: Sized {
     fn new(config: Config) -> NSEResult<Self>;
@@ -293,26 +305,21 @@ impl ExactSizeIterator for KeyGenerator {
 fn test_sealer_unsealer_consistency() {
     use rand::thread_rng;
 
-    let num_nodes_window = 1 << 10;
-    let mut rng = thread_rng();
-    let original_data = Layer(
-        (0..num_nodes_window)
-            .map(|_| Node::random(&mut rng))
-            .collect(),
-    );
-
     let config = Config {
         k: 4,
-        num_nodes_window: num_nodes_window,
+        num_nodes_window: 1 << 10,
         degree_expander: 384,
         degree_butterfly: 16,
         num_expander_layers: 8,
         num_butterfly_layers: 7,
     };
 
+    let mut rng = thread_rng();
+    let original_data = Layer::random(&mut rng, config.num_nodes_window);
+    let replica_id = Sha256Domain::random(&mut rng);
+    let window_index: usize = rng.gen();
+
     let gpu = GPU::new(config).unwrap();
-    let replica_id = Sha256Domain([123u8; 32]);
-    let window_index = 1234567890;
 
     let sealer = Sealer::new(config, replica_id, window_index, original_data.clone(), gpu).unwrap();
     let mut sealed_layers = Vec::new();
