@@ -104,18 +104,18 @@ pub struct Config {
     pub num_butterfly_layers: usize, // 7
 }
 
-pub struct Sealer {
+pub struct Sealer<'a> {
     original_data: Layer,
-    key_generator: KeyGenerator,
+    key_generator: KeyGenerator<'a>,
 }
 
-impl Sealer {
+impl<'a> Sealer<'a> {
     pub fn new(
         config: Config,
         replica_id: Sha256Domain,
         window_index: usize,
         original_data: Layer,
-        gpu: GPU,
+        gpu: &'a mut GPU,
     ) -> NSEResult<Self> {
         Ok(Self {
             original_data,
@@ -124,7 +124,7 @@ impl Sealer {
     }
 }
 
-impl Iterator for Sealer {
+impl<'a> Iterator for Sealer<'a> {
     type Item = Layer;
 
     /// Returns successive layers, starting with mask layer, and ending with sealed replica layer.
@@ -146,24 +146,24 @@ impl Iterator for Sealer {
     }
 }
 
-impl ExactSizeIterator for Sealer {
+impl<'a> ExactSizeIterator for Sealer<'a> {
     fn len(&self) -> usize {
         self.key_generator.len()
     }
 }
 
-pub struct Unsealer {
+pub struct Unsealer<'a> {
     sealed_data: Layer,
-    key_generator: KeyGenerator,
+    key_generator: KeyGenerator<'a>,
 }
 
-impl Unsealer {
+impl<'a> Unsealer<'a> {
     pub fn new(
         config: Config,
         replica_id: Sha256Domain,
         window_index: usize,
         sealed_data: Layer,
-        gpu: GPU,
+        gpu: &'a mut GPU,
     ) -> NSEResult<Self> {
         Ok(Self {
             sealed_data,
@@ -172,7 +172,7 @@ impl Unsealer {
     }
 }
 
-impl Iterator for Unsealer {
+impl<'a> Iterator for Unsealer<'a> {
     type Item = Layer;
 
     /// Returns successive layers, starting with mask layer, and ending with sealed replica layer.
@@ -194,25 +194,25 @@ impl Iterator for Unsealer {
     }
 }
 
-impl ExactSizeIterator for Unsealer {
+impl<'a> ExactSizeIterator for Unsealer<'a> {
     fn len(&self) -> usize {
         self.key_generator.len()
     }
 }
 
-pub struct KeyGenerator {
+pub struct KeyGenerator<'a> {
     replica_id: Sha256Domain,
     window_index: usize,
     current_layer_index: usize,
-    gpu: GPU,
+    gpu: &'a mut GPU,
 }
 
-impl KeyGenerator {
+impl<'a> KeyGenerator<'a> {
     fn new(
         config: Config,
         replica_id: Sha256Domain,
         window_index: usize,
-        gpu: GPU,
+        gpu: &'a mut GPU,
     ) -> NSEResult<Self> {
         assert_eq!(config.num_nodes_window, gpu.leaf_count());
         Ok(Self {
@@ -259,7 +259,7 @@ impl KeyGenerator {
     }
 }
 
-impl Iterator for KeyGenerator {
+impl<'a> Iterator for KeyGenerator<'a> {
     type Item = Layer;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -295,7 +295,7 @@ impl Iterator for KeyGenerator {
     }
 }
 
-impl ExactSizeIterator for KeyGenerator {
+impl<'a> ExactSizeIterator for KeyGenerator<'a> {
     fn len(&self) -> usize {
         self.config().num_expander_layers + self.config().num_butterfly_layers
     }
@@ -319,9 +319,16 @@ fn test_sealer_unsealer_consistency() {
     let replica_id = Sha256Domain::random(&mut rng);
     let window_index: usize = rng.gen();
 
-    let gpu = GPU::new(config).unwrap();
+    let mut gpu = GPU::new(config).unwrap();
 
-    let sealer = Sealer::new(config, replica_id, window_index, original_data.clone(), gpu).unwrap();
+    let sealer = Sealer::new(
+        config,
+        replica_id,
+        window_index,
+        original_data.clone(),
+        &mut gpu,
+    )
+    .unwrap();
     let mut sealed_layers = Vec::new();
     for l in sealer {
         sealed_layers.push(l);
@@ -329,8 +336,7 @@ fn test_sealer_unsealer_consistency() {
 
     let sealed_data = sealed_layers.last().unwrap().clone();
 
-    let gpu = GPU::new(config).unwrap();
-    let unsealer = Unsealer::new(config, replica_id, window_index, sealed_data, gpu).unwrap();
+    let unsealer = Unsealer::new(config, replica_id, window_index, sealed_data, &mut gpu).unwrap();
     let mut unsealed_layers = Vec::new();
     for l in unsealer {
         unsealed_layers.push(l);

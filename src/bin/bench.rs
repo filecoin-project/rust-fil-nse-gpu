@@ -14,22 +14,20 @@ macro_rules! timer {
     }};
 }
 
-fn bench_mask(conf: Config, samples: usize) -> u64 {
+fn bench_mask(gpu: &mut GPU, samples: usize) -> u64 {
     let mut rng = thread_rng();
     let replica_id = Sha256Domain::random(&mut rng);
     let window_index: usize = rng.gen();
-    let mut gpu = GPU::new(conf).unwrap();
     timer!(
         gpu.generate_mask_layer(replica_id, window_index).unwrap(),
         samples
     )
 }
 
-fn bench_expander(conf: Config, samples: usize) -> u64 {
+fn bench_expander(gpu: &mut GPU, samples: usize) -> u64 {
     let mut rng = thread_rng();
     let replica_id = Sha256Domain::random(&mut rng);
     let window_index: usize = rng.gen();
-    let mut gpu = GPU::new(conf).unwrap();
     gpu.generate_mask_layer(replica_id, window_index).unwrap();
     timer!(
         gpu.generate_expander_layer(replica_id, window_index, rng.gen())
@@ -38,11 +36,10 @@ fn bench_expander(conf: Config, samples: usize) -> u64 {
     )
 }
 
-fn bench_butterfly(conf: Config, samples: usize) -> u64 {
+fn bench_butterfly(gpu: &mut GPU, samples: usize) -> u64 {
     let mut rng = thread_rng();
     let replica_id = Sha256Domain::random(&mut rng);
     let window_index: usize = rng.gen();
-    let mut gpu = GPU::new(conf).unwrap();
     gpu.generate_mask_layer(replica_id, window_index).unwrap();
     timer!(
         gpu.generate_butterfly_layer(replica_id, window_index, rng.gen())
@@ -51,12 +48,11 @@ fn bench_butterfly(conf: Config, samples: usize) -> u64 {
     )
 }
 
-fn bench_combine(conf: Config, samples: usize) -> u64 {
+fn bench_combine(gpu: &mut GPU, samples: usize) -> u64 {
     let mut rng = thread_rng();
     let replica_id = Sha256Domain::random(&mut rng);
     let window_index: usize = rng.gen();
-    let data = Layer::random(&mut rng, conf.num_nodes_window);
-    let mut gpu = GPU::new(conf).unwrap();
+    let data = Layer::random(&mut rng, gpu.leaf_count());
     gpu.generate_mask_layer(replica_id, window_index).unwrap();
     timer!(gpu.combine_layer(&data, false).unwrap(), samples)
 }
@@ -98,8 +94,10 @@ fn main() {
     println!("Options: {:?}", opts);
 
     let config: Config = Config::from(opts);
-    println!("Mask: {}ms", bench_mask(config, opts.samples));
-    println!("Expander: {}ms", bench_expander(config, opts.samples));
-    println!("Butterfly: {}ms", bench_butterfly(config, opts.samples));
-    println!("Combine: {}ms", bench_combine(config, opts.samples));
+    let mut gpu = GPU::new(config).unwrap();
+    
+    println!("Mask: {}ms", bench_mask(&mut gpu, opts.samples));
+    println!("Expander: {}ms", bench_expander(&mut gpu, opts.samples));
+    println!("Butterfly: {}ms", bench_butterfly(&mut gpu, opts.samples));
+    println!("Combine: {}ms", bench_combine(&mut gpu, opts.samples));
 }
