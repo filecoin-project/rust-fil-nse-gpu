@@ -14,59 +14,51 @@ macro_rules! timer {
     }};
 }
 
-macro_rules! bench_mask {
-    ($conf:expr, $samples:expr) => {{
-        let mut rng = thread_rng();
-        let replica_id = Sha256Domain::random(&mut rng);
-        let window_index: usize = rng.gen();
-        let mut gpu = GPU::new($conf).unwrap();
-        timer!(
-            gpu.generate_mask_layer(replica_id, window_index).unwrap(),
-            $samples
-        )
-    }};
+fn bench_mask(conf: Config, samples: usize) -> u64 {
+    let mut rng = thread_rng();
+    let replica_id = Sha256Domain::random(&mut rng);
+    let window_index: usize = rng.gen();
+    let mut gpu = GPU::new(conf).unwrap();
+    timer!(
+        gpu.generate_mask_layer(replica_id, window_index).unwrap(),
+        samples
+    )
 }
 
-macro_rules! bench_expander {
-    ($conf:expr, $samples:expr) => {{
-        let mut rng = thread_rng();
-        let replica_id = Sha256Domain::random(&mut rng);
-        let window_index: usize = rng.gen();
-        let mut gpu = GPU::new($conf).unwrap();
-        gpu.generate_mask_layer(replica_id, window_index).unwrap();
-        timer!(
-            gpu.generate_expander_layer(replica_id, window_index, rng.gen())
-                .unwrap(),
-            $samples
-        )
-    }};
+fn bench_expander(conf: Config, samples: usize) -> u64 {
+    let mut rng = thread_rng();
+    let replica_id = Sha256Domain::random(&mut rng);
+    let window_index: usize = rng.gen();
+    let mut gpu = GPU::new(conf).unwrap();
+    gpu.generate_mask_layer(replica_id, window_index).unwrap();
+    timer!(
+        gpu.generate_expander_layer(replica_id, window_index, rng.gen())
+            .unwrap(),
+        samples
+    )
 }
 
-macro_rules! bench_butterfly {
-    ($conf:expr, $samples:expr) => {{
-        let mut rng = thread_rng();
-        let replica_id = Sha256Domain::random(&mut rng);
-        let window_index: usize = rng.gen();
-        let mut gpu = GPU::new($conf).unwrap();
-        gpu.generate_mask_layer(replica_id, window_index).unwrap();
-        timer!(
-            gpu.generate_butterfly_layer(replica_id, window_index, rng.gen())
-                .unwrap(),
-            $samples
-        )
-    }};
+fn bench_butterfly(conf: Config, samples: usize) -> u64 {
+    let mut rng = thread_rng();
+    let replica_id = Sha256Domain::random(&mut rng);
+    let window_index: usize = rng.gen();
+    let mut gpu = GPU::new(conf).unwrap();
+    gpu.generate_mask_layer(replica_id, window_index).unwrap();
+    timer!(
+        gpu.generate_butterfly_layer(replica_id, window_index, rng.gen())
+            .unwrap(),
+        samples
+    )
 }
 
-macro_rules! bench_combine {
-    ($conf:expr, $samples:expr) => {{
-        let mut rng = thread_rng();
-        let replica_id = Sha256Domain::random(&mut rng);
-        let window_index: usize = rng.gen();
-        let data = Layer::random(&mut rng, $conf.num_nodes_window);
-        let mut gpu = GPU::new($conf).unwrap();
-        gpu.generate_mask_layer(replica_id, window_index).unwrap();
-        timer!(gpu.combine_layer(&data, false).unwrap(), $samples)
-    }};
+fn bench_combine(conf: Config, samples: usize) -> u64 {
+    let mut rng = thread_rng();
+    let replica_id = Sha256Domain::random(&mut rng);
+    let window_index: usize = rng.gen();
+    let data = Layer::random(&mut rng, conf.num_nodes_window);
+    let mut gpu = GPU::new(conf).unwrap();
+    gpu.generate_mask_layer(replica_id, window_index).unwrap();
+    timer!(gpu.combine_layer(&data, false).unwrap(), samples)
 }
 
 #[derive(Debug, StructOpt)]
@@ -105,8 +97,8 @@ fn main() {
 
     println!("Config: {:?}", config);
 
-    println!("Mask: {}ms", bench_mask!(config, SAMPLES));
-    println!("Expander: {}ms", bench_expander!(config, SAMPLES));
-    println!("Butterfly: {}ms", bench_butterfly!(config, SAMPLES));
-    println!("Combine: {}ms", bench_combine!(config, SAMPLES));
+    println!("Mask: {}ms", bench_mask(config, SAMPLES));
+    println!("Expander: {}ms", bench_expander(config, SAMPLES));
+    println!("Butterfly: {}ms", bench_butterfly(config, SAMPLES));
+    println!("Combine: {}ms", bench_combine(config, SAMPLES));
 }
