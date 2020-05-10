@@ -60,8 +60,6 @@ jobs:
       - run: rustup component add clippy-preview
       - run: rustc --version
       - run: rm -rf .git
-      - run: sudo apt-get update -y
-      - run: sudo apt-get install -y ocl-icd-opencl-dev
       - persist_to_workspace:
           root: ~/
           paths:
@@ -112,6 +110,9 @@ jobs:
       - *restore-cache
       - run: echo 'export PATH="$HOME:~/.cargo/bin:$PATH"' >> $BASH_ENV
       - run: source $BASH_ENV
+      - run: sudo apt-get update -y
+      - run: apt-cache search opencl
+      - run: sudo apt install -y ocl-icd-opencl-dev
       - run:
           name: Run cargo release build
           command: cargo build --release
