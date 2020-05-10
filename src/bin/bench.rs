@@ -61,9 +61,9 @@ fn bench_combine(conf: Config, samples: usize) -> u64 {
     timer!(gpu.combine_layer(&data, false).unwrap(), samples)
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, StructOpt, Clone, Copy)]
 #[structopt(name = "NSE Bench", about = "Benchmarking NSE operations on GPU.")]
-struct ConfigCLI {
+struct Opts {
     #[structopt(short = "k", default_value = "8")]
     k: u32,
     #[structopt(long = "num-nodes-window", default_value = "524288")]
@@ -76,10 +76,12 @@ struct ConfigCLI {
     num_expander_layers: usize,
     #[structopt(long = "num-butterfly-layers", default_value = "7")]
     num_butterfly_layers: usize,
+    #[structopt(long = "samples", default_value = "10")]
+    samples: usize,
 }
 
-impl From<ConfigCLI> for Config {
-    fn from(cli: ConfigCLI) -> Self {
+impl From<Opts> for Config {
+    fn from(cli: Opts) -> Self {
         Config {
             k: cli.k,
             num_nodes_window: cli.num_nodes_window,
@@ -92,13 +94,12 @@ impl From<ConfigCLI> for Config {
 }
 
 fn main() {
-    const SAMPLES: usize = 4;
-    let config: Config = Config::from(ConfigCLI::from_args());
+    let opts = Opts::from_args();
+    println!("Options: {:?}", opts);
 
-    println!("Config: {:?}", config);
-
-    println!("Mask: {}ms", bench_mask(config, SAMPLES));
-    println!("Expander: {}ms", bench_expander(config, SAMPLES));
-    println!("Butterfly: {}ms", bench_butterfly(config, SAMPLES));
-    println!("Combine: {}ms", bench_combine(config, SAMPLES));
+    let config: Config = Config::from(opts);
+    println!("Mask: {}ms", bench_mask(config, opts.samples));
+    println!("Expander: {}ms", bench_expander(config, opts.samples));
+    println!("Butterfly: {}ms", bench_butterfly(config, opts.samples));
+    println!("Combine: {}ms", bench_combine(config, opts.samples));
 }
