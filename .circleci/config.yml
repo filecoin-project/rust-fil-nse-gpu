@@ -60,6 +60,8 @@ jobs:
       - run: rustup component add clippy-preview
       - run: rustc --version
       - run: rm -rf .git
+      - run: sudo apt-get update
+      - run: sudo apt-get install ocl-icd-opencl-dev
       - persist_to_workspace:
           root: ~/
           paths:
