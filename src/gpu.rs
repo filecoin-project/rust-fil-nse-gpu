@@ -116,6 +116,15 @@ pub struct GPU {
     pub config: Config,
 }
 
+impl GPU {
+    // Overwrite current layer
+    pub fn push_layer(&mut self, layer: &Layer) -> NSEResult<()> {
+        self.context.push_buffer(&layer.0, 0)?;
+        self.context.make_buffer_current();
+        Ok(())
+    }
+}
+
 impl NarrowStackedExpander for GPU {
     fn new(config: Config) -> NSEResult<Self> {
         // Choose first NVIDIA GPU
