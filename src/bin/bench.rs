@@ -57,6 +57,21 @@ fn bench_combine(gpu: &mut GPU, samples: usize) -> u64 {
     timer!(gpu.combine_layer(&data, false).unwrap(), samples)
 }
 
+fn bench_sealer(gpu: &mut GPU, samples: usize) -> u64 {
+    let mut rng = thread_rng();
+    let replica_id = Sha256Domain::random(&mut rng);
+    let window_index: usize = rng.gen();
+    let data = Layer::random(&mut rng, gpu.leaf_count());
+    timer!(
+        {
+            let sealer =
+                Sealer::new(gpu.config, replica_id, window_index, data.clone(), gpu).unwrap();
+            for _ in sealer {}
+        },
+        samples
+    )
+}
+
 #[derive(Debug, StructOpt, Clone, Copy)]
 #[structopt(name = "NSE Bench", about = "Benchmarking NSE operations on GPU.")]
 struct Opts {
@@ -95,9 +110,10 @@ fn main() {
 
     let config: Config = Config::from(opts);
     let mut gpu = GPU::new(config).unwrap();
-    
+
     println!("Mask: {}ms", bench_mask(&mut gpu, opts.samples));
     println!("Expander: {}ms", bench_expander(&mut gpu, opts.samples));
     println!("Butterfly: {}ms", bench_butterfly(&mut gpu, opts.samples));
     println!("Combine: {}ms", bench_combine(&mut gpu, opts.samples));
+    println!("Sealer: {}ms", bench_sealer(&mut gpu, opts.samples));
 }
