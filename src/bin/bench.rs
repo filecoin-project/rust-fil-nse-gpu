@@ -62,7 +62,7 @@ fn bench_combine(conf: Config, samples: usize) -> u64 {
 }
 
 #[derive(Debug, StructOpt)]
-#[structopt(name = "NSE Config", about = "CLI configuration of NSE.")]
+#[structopt(name = "NSE Bench", about = "Benchmarking NSE operations on GPU.")]
 struct ConfigCLI {
     #[structopt(short = "k", default_value = "8")]
     k: u32,
