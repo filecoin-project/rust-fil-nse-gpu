@@ -16,3 +16,4 @@ ff-cl-gen = { git = "https://github.com/filecoin-project/ff-cl-gen.git"}
 itertools = { version = "0.8.0" }
 thiserror = "1.0.10"
 rand = "0.7"
+structopt = { version = "0.3", default-features = false }
