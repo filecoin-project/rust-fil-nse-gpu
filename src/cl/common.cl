@@ -25,7 +25,7 @@ sha256_block hash_prefix(uint layer_index, uint node_index, uint window_index, s
   data.vals[1] = node_index;
   data.vals[2] = window_index;
   for(uint i = 0; i < 8; i++) {
-    data.vals[8 + i] = replica_id.vals[i];
+    data.vals[8 + i] = reverse_bytes(replica_id.vals[i]);
   }
   return data;
 }
