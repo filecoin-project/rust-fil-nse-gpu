@@ -2,6 +2,18 @@
 #define NUM_LAYERS (NUM_EXPANDER_LAYERS + NUM_BUTTERFLY_LAYERS)
 #define MODULO_N_MASK (N - 1)
 
+__kernel void generate_montgomery(__global Fr *output,
+                                  __global Fr *input) {
+  uint node = get_global_id(0);
+  output[node] = Fr_mont(input[node]);
+}
+
+__kernel void generate_ordinary(__global Fr *input,
+                                __global Fr *output) {
+  uint node = get_global_id(0);
+  output[node] = Fr_unmont(input[node]);
+}
+
 uint reverse_bytes(uint a) {
   return (a & 0x000000ff) << 24 | (a & 0x0000ff00) << 8 |
          (a & 0x00ff0000) >> 8 | (a & 0xff000000) >> 24;

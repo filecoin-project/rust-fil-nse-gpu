@@ -1,5 +1,5 @@
-__kernel void combine_segment(__global Fr *mask,
-                              __global Fr *data,
+__kernel void combine_segment(__global Fr *data,
+                              __global Fr *mask,
                               uint offset,
                               uint len,
                               uint is_decode) {
