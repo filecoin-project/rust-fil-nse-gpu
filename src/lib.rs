@@ -301,48 +301,101 @@ impl<'a> ExactSizeIterator for KeyGenerator<'a> {
     }
 }
 
-#[test]
-fn test_sealer_unsealer_consistency() {
-    use rand::thread_rng;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ff::{Field, PrimeField};
+    use paired::bls12_381::Fr;
 
-    let config = Config {
+    pub const TEST_CONFIG: Config = Config {
         k: 4,
-        num_nodes_window: 1 << 10,
-        degree_expander: 384,
-        degree_butterfly: 16,
-        num_expander_layers: 8,
-        num_butterfly_layers: 7,
+        num_nodes_window: 1024,
+        degree_expander: 96,
+        degree_butterfly: 4,
+        num_expander_layers: 4,
+        num_butterfly_layers: 3,
     };
+    pub const TEST_WINDOW_INDEX: usize = 1234567890;
+    pub const TEST_REPLICA_ID: Sha256Domain = Sha256Domain([123u8; 32]);
 
-    let mut rng = thread_rng();
-    let original_data = Layer::random(&mut rng, config.num_nodes_window);
-    let replica_id = Sha256Domain::random(&mut rng);
-    let window_index: usize = rng.gen();
-
-    let mut gpu = GPU::new(config).unwrap();
-
-    let sealer = Sealer::new(
-        config,
-        replica_id,
-        window_index,
-        original_data.clone(),
-        &mut gpu,
-    )
-    .unwrap();
-    let mut sealed_layers = Vec::new();
-    for l in sealer {
-        sealed_layers.push(l);
+    pub fn incrementing_layer(start: usize) -> Layer {
+        Layer(
+            (start..start + TEST_CONFIG.num_nodes_window)
+                .map(|i| Node(Fr::from_str(&i.to_string()).unwrap()))
+                .collect(),
+        )
     }
 
-    let sealed_data = sealed_layers.last().unwrap().clone();
-
-    let unsealer = Unsealer::new(config, replica_id, window_index, sealed_data, &mut gpu).unwrap();
-    let mut unsealed_layers = Vec::new();
-    for l in unsealer {
-        unsealed_layers.push(l);
+    pub fn accumulate(l: &Vec<Node>) -> Node {
+        let mut acc = Fr::zero();
+        for n in l.iter() {
+            acc.add_assign(&n.0);
+        }
+        Node(acc)
     }
 
-    let unsealed_data = unsealed_layers.last().unwrap().clone();
+    #[test]
+    fn test_sealer() {
+        let mut gpu = GPU::new(TEST_CONFIG).unwrap();
+        let original_data = incrementing_layer(123);
+        let sealer = Sealer::new(
+            TEST_CONFIG,
+            TEST_REPLICA_ID,
+            TEST_WINDOW_INDEX,
+            original_data.clone(),
+            &mut gpu,
+        )
+        .unwrap();
 
-    assert_eq!(unsealed_data, original_data);
+        let mut accs = Vec::new();
+        for l in sealer {
+            accs.push(accumulate(&l.0));
+        }
+
+        assert_eq!(
+            Fr::from_str(
+                "7813907933754549568041194750577494363246706453616511648622478124833387777950"
+            )
+            .unwrap(),
+            accumulate(&accs).0
+        );
+    }
+
+    #[test]
+    fn test_sealer_unsealer_consistency() {
+        use rand::thread_rng;
+
+        let mut rng = thread_rng();
+        let original_data = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
+        let replica_id = Sha256Domain::random(&mut rng);
+        let window_index: usize = rng.gen();
+
+        let mut gpu = GPU::new(TEST_CONFIG).unwrap();
+
+        let sealer = Sealer::new(
+            TEST_CONFIG,
+            replica_id,
+            window_index,
+            original_data.clone(),
+            &mut gpu,
+        )
+        .unwrap();
+        let mut sealed_layers = Vec::new();
+        for l in sealer {
+            sealed_layers.push(l);
+        }
+
+        let sealed_data = sealed_layers.last().unwrap().clone();
+
+        let unsealer =
+            Unsealer::new(TEST_CONFIG, replica_id, window_index, sealed_data, &mut gpu).unwrap();
+        let mut unsealed_layers = Vec::new();
+        for l in unsealer {
+            unsealed_layers.push(l);
+        }
+
+        let unsealed_data = unsealed_layers.last().unwrap().clone();
+
+        assert_eq!(unsealed_data, original_data);
+    }
 }

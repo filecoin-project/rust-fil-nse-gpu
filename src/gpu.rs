@@ -230,36 +230,9 @@ impl NarrowStackedExpander for GPU {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ff::{Field, PrimeField};
+    use crate::tests::*;
+    use ff::PrimeField;
     use paired::bls12_381::Fr;
-
-    const TEST_CONFIG: Config = Config {
-        k: 4,
-        num_nodes_window: 1024,
-        degree_expander: 96,
-        degree_butterfly: 4,
-        num_expander_layers: 4,
-        num_butterfly_layers: 3,
-    };
-    const TEST_WINDOW_INDEX: usize = 1234567890;
-    const TEST_REPLICA_ID: Sha256Domain = Sha256Domain([123u8; 32]);
-
-    fn accumulate(l: &Layer) -> Fr {
-        let mut acc = Fr::zero();
-        for n in l.0.iter() {
-            acc.add_assign(&n.0);
-        }
-        acc
-    }
-
-    // [Fr(start), Fr(start + 1), ..., Fr(start + num_nodes_window - 1)]
-    fn incrementing_layer(start: usize) -> Layer {
-        Layer(
-            (start..start + TEST_CONFIG.num_nodes_window)
-                .map(|i| Node(Fr::from_str(&i.to_string()).unwrap()))
-                .collect(),
-        )
-    }
 
     #[test]
     fn test_generate_mask_layer() {
@@ -272,7 +245,7 @@ mod tests {
                 "6446969232366391856858003439695628724183208016254828395100207087840708265392"
             )
             .unwrap(),
-            accumulate(&l)
+            accumulate(&l.0).0
         );
     }
 
@@ -288,7 +261,7 @@ mod tests {
                 "31927618342922418711037965387576862711609979706171976983782310220611346538648"
             )
             .unwrap(),
-            accumulate(&l)
+            accumulate(&l.0).0
         );
     }
 
@@ -304,7 +277,7 @@ mod tests {
                 "28446803097318130282256338067690839150703163945352000894825958507969324842746"
             )
             .unwrap(),
-            accumulate(&l)
+            accumulate(&l.0).0
         );
     }
 
@@ -314,9 +287,9 @@ mod tests {
         let data = incrementing_layer(567);
         let mask = incrementing_layer(234);
         gpu.push_layer(&mask).unwrap();
-        let encode = Layer(gpu.combine_segment(0, &data.0, false).unwrap());
-        let decode = Layer(gpu.combine_segment(0, &data.0, true).unwrap());
-        assert_eq!(Fr::from_str("1867776").unwrap(), accumulate(&encode));
-        assert_eq!(Fr::from_str("340992").unwrap(), accumulate(&decode));
+        let encode = gpu.combine_segment(0, &data.0, false).unwrap();
+        let decode = gpu.combine_segment(0, &data.0, true).unwrap();
+        assert_eq!(Fr::from_str("1867776").unwrap(), accumulate(&encode).0);
+        assert_eq!(Fr::from_str("340992").unwrap(), accumulate(&decode).0);
     }
 }
