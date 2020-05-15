@@ -66,60 +66,66 @@ mod tests {
     #[test]
     fn test_expander_compatibility() {
         let mut rng = thread_rng();
-        let prev_layer = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
-        let replica_id = Sha256Domain::random(&mut rng);
-        let window_index: usize = rng.gen();
-        let layer_index = 2;
-
         let mut gpu = GPU::new(TEST_CONFIG).unwrap();
-        gpu.push_layer(&prev_layer).unwrap();
-        let gpu_output = gpu
-            .generate_expander_layer(replica_id, window_index, layer_index)
+
+        for _ in 0..10 {
+            let prev_layer = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
+            let replica_id = Sha256Domain::random(&mut rng);
+            let window_index: usize = rng.gen();
+            let layer_index = 2;
+
+            gpu.push_layer(&prev_layer).unwrap();
+            let gpu_output = gpu
+                .generate_expander_layer(replica_id, window_index, layer_index)
+                .unwrap();
+
+            let layer_a = layer_to_vec_u8(&prev_layer);
+            let mut layer_b = layer_a.clone();
+            nse::expander_layer(
+                &to_cpu_config(TEST_CONFIG),
+                window_index as u32,
+                &sha256::Sha256Domain::from(replica_id.0),
+                layer_index as u32,
+                &layer_a,
+                &mut layer_b,
+            )
             .unwrap();
+            let cpu_output = vec_u8_to_layer(&layer_b);
 
-        let layer_a = layer_to_vec_u8(&prev_layer);
-        let mut layer_b = layer_a.clone();
-        nse::expander_layer(
-            &to_cpu_config(TEST_CONFIG),
-            window_index as u32,
-            &sha256::Sha256Domain::from(replica_id.0),
-            layer_index as u32,
-            &layer_a,
-            &mut layer_b,
-        )
-        .unwrap();
-        let cpu_output = vec_u8_to_layer(&layer_b);
-
-        assert_eq!(accumulate(&cpu_output.0), accumulate(&gpu_output.0));
+            assert_eq!(accumulate(&cpu_output.0), accumulate(&gpu_output.0));
+        }
     }
 
     #[test]
     fn test_butterfly_compatibility() {
         let mut rng = thread_rng();
-        let prev_layer = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
-        let replica_id = Sha256Domain::random(&mut rng);
-        let window_index: usize = rng.gen();
-        let layer_index = 5;
-
         let mut gpu = GPU::new(TEST_CONFIG).unwrap();
-        gpu.push_layer(&prev_layer).unwrap();
-        let gpu_output = gpu
-            .generate_butterfly_layer(replica_id, window_index, layer_index)
+
+        for _ in 0..10 {
+            let prev_layer = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
+            let replica_id = Sha256Domain::random(&mut rng);
+            let window_index: usize = rng.gen();
+            let layer_index = 5;
+
+            gpu.push_layer(&prev_layer).unwrap();
+            let gpu_output = gpu
+                .generate_butterfly_layer(replica_id, window_index, layer_index)
+                .unwrap();
+
+            let layer_a = layer_to_vec_u8(&prev_layer);
+            let mut layer_b = layer_a.clone();
+            nse::butterfly_layer(
+                &to_cpu_config(TEST_CONFIG),
+                window_index as u32,
+                &sha256::Sha256Domain::from(replica_id.0),
+                layer_index as u32,
+                &layer_a,
+                &mut layer_b,
+            )
             .unwrap();
+            let cpu_output = vec_u8_to_layer(&layer_b);
 
-        let layer_a = layer_to_vec_u8(&prev_layer);
-        let mut layer_b = layer_a.clone();
-        nse::butterfly_layer(
-            &to_cpu_config(TEST_CONFIG),
-            window_index as u32,
-            &sha256::Sha256Domain::from(replica_id.0),
-            layer_index as u32,
-            &layer_a,
-            &mut layer_b,
-        )
-        .unwrap();
-        let cpu_output = vec_u8_to_layer(&layer_b);
-
-        assert_eq!(accumulate(&cpu_output.0), accumulate(&gpu_output.0));
+            assert_eq!(accumulate(&cpu_output.0), accumulate(&gpu_output.0));
+        }
     }
 }
