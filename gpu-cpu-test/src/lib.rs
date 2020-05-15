@@ -1,15 +1,19 @@
 #[cfg(test)]
 mod tests {
     use ff::{Field, PrimeField};
+    use merkletree::store::StoreConfig;
     use paired::bls12_381::{Fr, FrRepr};
     use rand::{thread_rng, Rng};
     use rust_fil_nse_gpu::*;
+    use storage_proofs::cache_key::CacheKey;
     use storage_proofs::hasher::sha256;
+    use storage_proofs::merkle::split_config;
+    use storage_proofs::merkle::OctLCMerkleTree;
     use storage_proofs::porep::nse;
 
     pub const TEST_CONFIG: Config = Config {
-        k: 4,
-        num_nodes_window: 1024,
+        k: 2,
+        num_nodes_window: 512, // Must be 2^(3*x) for 8-ary merkle trees
         degree_expander: 96,
         degree_butterfly: 4,
         num_expander_layers: 4,
@@ -126,6 +130,58 @@ mod tests {
             let cpu_output = vec_u8_to_layer(&layer_b);
 
             assert_eq!(accumulate(&cpu_output.0), accumulate(&gpu_output.0));
+        }
+    }
+
+    #[test]
+    fn test_sealer_compatibility() {
+        let mut rng = thread_rng();
+        let mut gpu = GPU::new(TEST_CONFIG).unwrap();
+
+        for _ in 0..10 {
+            let data = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
+            let replica_id = Sha256Domain::random(&mut rng);
+            let window_index: usize = rng.gen();
+            let sealer = Sealer::new(
+                TEST_CONFIG,
+                replica_id,
+                window_index,
+                data.clone(),
+                &mut gpu,
+            )
+            .unwrap();
+
+            let mut sealed_layers = Vec::new();
+            for l in sealer {
+                sealed_layers.push(l);
+            }
+
+            let gpu_output = sealed_layers.last().unwrap().clone();
+
+            let gpu_config = to_cpu_config(TEST_CONFIG);
+            let cache_dir = tempfile::tempdir().unwrap();
+            let store_config = StoreConfig::new(
+                cache_dir.path(),
+                CacheKey::CommDTree.to_string(),
+                StoreConfig::default_cached_above_base_layer(
+                    gpu_config.num_nodes_window as usize,
+                    8,
+                ),
+            );
+            let store_configs =
+                split_config(store_config.clone(), gpu_config.num_layers()).unwrap();
+            let mut cpu_output = layer_to_vec_u8(&data);
+            nse::encode_with_trees::<OctLCMerkleTree<sha256::Sha256Hasher>>(
+                &gpu_config,
+                store_configs,
+                window_index as u32,
+                &sha256::Sha256Domain::from(replica_id.0),
+                &mut cpu_output,
+            )
+            .unwrap();
+            let cpu_output = vec_u8_to_layer(&cpu_output);
+
+            assert_eq!(cpu_output, gpu_output);
         }
     }
 }
