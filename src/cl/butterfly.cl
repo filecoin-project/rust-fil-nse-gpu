@@ -1,6 +1,6 @@
 __kernel void generate_butterfly(__global Fr *input,
                                  __global Fr *output,
-                                 sha256_domain replica_id,
+                                 replica_id id,
                                  uint window_index,
                                  uint layer_index) {
 
@@ -9,7 +9,7 @@ __kernel void generate_butterfly(__global Fr *input,
   uint factor = 1 << (LOG2_DEGREE_BUTTERFLY * (NUM_LAYERS - layer_index));
 
   sha256_domain state = sha256_INIT;
-  state = sha256_update(state, hash_prefix(layer_index, v, window_index, replica_id));
+  state = sha256_update(state, hash_prefix(layer_index, v, window_index, id));
 
   for(uint i = 0; i < DEGREE_BUTTERFLY / 2; i++) {
     uint i_1 = i * 2;

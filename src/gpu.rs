@@ -1,5 +1,5 @@
 use super::{
-    sources, Config, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node, Sha256Domain,
+    sources, Config, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node, ReplicaId,
     COMBINE_BATCH_SIZE,
 };
 use log::info;
@@ -39,7 +39,7 @@ fn read_buffer<T: OclPrm>(buff: &Buffer<T>, offset: usize, segment: &mut [T]) ->
 
 // Make `Node` movable to GPU buffers by implementing `OclPrm`
 unsafe impl OclPrm for Node {}
-unsafe impl OclPrm for Sha256Domain {}
+unsafe impl OclPrm for ReplicaId {}
 
 // Manages buffers
 struct GPUContext {
@@ -142,7 +142,7 @@ impl NarrowStackedExpander for GPU {
 
     fn generate_mask_layer(
         &mut self,
-        replica_id: Sha256Domain,
+        replica_id: ReplicaId,
         window_index: usize,
     ) -> NSEResult<Layer> {
         let mut l = Layer(vec![Node::default(); self.leaf_count()]);
@@ -167,7 +167,7 @@ impl NarrowStackedExpander for GPU {
 
     fn generate_expander_layer(
         &mut self,
-        replica_id: Sha256Domain,
+        replica_id: ReplicaId,
         window_index: usize,
         layer_index: usize,
     ) -> NSEResult<Layer> {
@@ -195,7 +195,7 @@ impl NarrowStackedExpander for GPU {
 
     fn generate_butterfly_layer(
         &mut self,
-        replica_id: Sha256Domain,
+        replica_id: ReplicaId,
         window_index: usize,
         layer_index: usize,
     ) -> NSEResult<Layer> {
@@ -273,7 +273,7 @@ mod tests {
         num_butterfly_layers: 3,
     };
     const TEST_WINDOW_INDEX: usize = 1234567890;
-    const TEST_REPLICA_ID: Sha256Domain = Sha256Domain([123u8; 32]);
+    const TEST_REPLICA_ID: ReplicaId = ReplicaId([123u8; 32]);
 
     pub fn accumulate(l: &Vec<Node>) -> Node {
         let mut acc = Fr::zero();

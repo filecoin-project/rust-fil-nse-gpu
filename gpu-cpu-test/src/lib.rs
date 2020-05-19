@@ -32,8 +32,8 @@ mod tests {
         }
     }
 
-    fn to_poseidon_domain(sha256: Sha256Domain) -> poseidon::PoseidonDomain {
-        unsafe { std::mem::transmute::<Sha256Domain, poseidon::PoseidonDomain>(sha256) }
+    fn replica_id_to_poseidon_domain(replica_id: ReplicaId) -> poseidon::PoseidonDomain {
+        unsafe { std::mem::transmute::<ReplicaId, poseidon::PoseidonDomain>(replica_id) }
     }
 
     fn node_to_poseidon_domain(node: Node) -> poseidon::PoseidonDomain {
@@ -82,7 +82,7 @@ mod tests {
 
         for _ in 0..10 {
             let prev_layer = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
-            let replica_id = Sha256Domain::random(&mut rng);
+            let replica_id = ReplicaId::random(&mut rng);
             let window_index: usize = rng.gen();
             let layer_index = 2;
 
@@ -96,7 +96,7 @@ mod tests {
             nse::expander_layer(
                 &to_cpu_config(TEST_CONFIG),
                 window_index as u32,
-                &to_poseidon_domain(replica_id),
+                &replica_id_to_poseidon_domain(replica_id),
                 layer_index as u32,
                 &layer_a,
                 &mut layer_b,
@@ -115,7 +115,7 @@ mod tests {
 
         for _ in 0..10 {
             let prev_layer = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
-            let replica_id = Sha256Domain::random(&mut rng);
+            let replica_id = ReplicaId::random(&mut rng);
             let window_index: usize = rng.gen();
             let layer_index = 5;
 
@@ -129,7 +129,7 @@ mod tests {
             nse::butterfly_layer(
                 &to_cpu_config(TEST_CONFIG),
                 window_index as u32,
-                &to_poseidon_domain(replica_id),
+                &replica_id_to_poseidon_domain(replica_id),
                 layer_index as u32,
                 &layer_a,
                 &mut layer_b,
@@ -148,7 +148,7 @@ mod tests {
 
         for _ in 0..10 {
             let data = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
-            let replica_id = Sha256Domain::random(&mut rng);
+            let replica_id = ReplicaId::random(&mut rng);
             let window_index: usize = rng.gen();
             let sealer = Sealer::new(
                 TEST_CONFIG,
@@ -186,7 +186,7 @@ mod tests {
                     &cpu_config,
                     store_configs,
                     window_index as u32,
-                    &to_poseidon_domain(replica_id),
+                    &replica_id_to_poseidon_domain(replica_id),
                     &mut cpu_output,
                 )
                 .unwrap();

@@ -56,17 +56,17 @@ impl Default for Node {
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub struct Sha256Domain(pub [u8; 32]);
+pub struct ReplicaId(pub [u8; 32]);
 
-impl Default for Sha256Domain {
+impl Default for ReplicaId {
     fn default() -> Self {
         Self([0u8; 32])
     }
 }
 
-impl Sha256Domain {
+impl ReplicaId {
     pub fn random<R: RngCore>(rng: &mut R) -> Self {
-        Sha256Domain(rng.gen())
+        ReplicaId(rng.gen())
     }
 }
 
@@ -89,18 +89,18 @@ pub trait NarrowStackedExpander: Sized {
     fn new(config: Config) -> NSEResult<Self>;
     fn generate_mask_layer(
         &mut self,
-        replica_id: Sha256Domain,
+        replica_id: ReplicaId,
         window_index: usize,
     ) -> NSEResult<Layer>;
     fn generate_expander_layer(
         &mut self,
-        replica_id: Sha256Domain,
+        replica_id: ReplicaId,
         window_index: usize,
         layer_index: usize,
     ) -> NSEResult<Layer>;
     fn generate_butterfly_layer(
         &mut self,
-        replica_id: Sha256Domain,
+        replica_id: ReplicaId,
         window_index: usize,
         layer_index: usize,
     ) -> NSEResult<Layer>;
@@ -150,7 +150,7 @@ const TREE_BUILDER_BATCH_SIZE: usize = 400_000;
 impl<'a> Sealer<'a> {
     pub fn new(
         config: Config,
-        replica_id: Sha256Domain,
+        replica_id: ReplicaId,
         window_index: usize,
         original_data: Layer,
         gpu: &'a mut GPU,
@@ -249,7 +249,7 @@ pub struct Unsealer<'a> {
 impl<'a> Unsealer<'a> {
     pub fn new(
         config: Config,
-        replica_id: Sha256Domain,
+        replica_id: ReplicaId,
         window_index: usize,
         gpu: &'a mut GPU,
     ) -> NSEResult<Self> {
@@ -275,7 +275,7 @@ impl<'a> Unsealer<'a> {
 }
 
 pub struct KeyGenerator<'a> {
-    replica_id: Sha256Domain,
+    replica_id: ReplicaId,
     window_index: usize,
     current_layer_index: usize,
     gpu: &'a mut GPU,
@@ -284,7 +284,7 @@ pub struct KeyGenerator<'a> {
 impl<'a> KeyGenerator<'a> {
     fn new(
         config: Config,
-        replica_id: Sha256Domain,
+        replica_id: ReplicaId,
         window_index: usize,
         gpu: &'a mut GPU,
     ) -> NSEResult<Self> {
@@ -413,7 +413,7 @@ mod tests {
         num_butterfly_layers: 3,
     };
     const TEST_WINDOW_INDEX: usize = 1234567890;
-    const TEST_REPLICA_ID: Sha256Domain = Sha256Domain([123u8; 32]);
+    const TEST_REPLICA_ID: ReplicaId = ReplicaId([123u8; 32]);
 
     pub fn incrementing_layer(start: usize, count: usize) -> Layer {
         Layer(
@@ -567,7 +567,7 @@ mod tests {
 
         let mut rng = thread_rng();
         let original_data = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
-        let replica_id = Sha256Domain::random(&mut rng);
+        let replica_id = ReplicaId::random(&mut rng);
         let window_index: usize = rng.gen();
 
         let mut gpu = GPU::new(TEST_CONFIG).unwrap();

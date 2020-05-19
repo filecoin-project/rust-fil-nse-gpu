@@ -16,7 +16,7 @@ macro_rules! timer {
 
 fn bench_mask(gpu: &mut GPU, samples: usize) -> u64 {
     let mut rng = thread_rng();
-    let replica_id = Sha256Domain::random(&mut rng);
+    let replica_id = ReplicaId::random(&mut rng);
     let window_index: usize = rng.gen();
     timer!(
         gpu.generate_mask_layer(replica_id, window_index).unwrap(),
@@ -26,7 +26,7 @@ fn bench_mask(gpu: &mut GPU, samples: usize) -> u64 {
 
 fn bench_expander(gpu: &mut GPU, samples: usize) -> u64 {
     let mut rng = thread_rng();
-    let replica_id = Sha256Domain::random(&mut rng);
+    let replica_id = ReplicaId::random(&mut rng);
     let window_index: usize = rng.gen();
     gpu.generate_mask_layer(replica_id, window_index).unwrap();
     timer!(
@@ -38,7 +38,7 @@ fn bench_expander(gpu: &mut GPU, samples: usize) -> u64 {
 
 fn bench_butterfly(gpu: &mut GPU, samples: usize) -> u64 {
     let mut rng = thread_rng();
-    let replica_id = Sha256Domain::random(&mut rng);
+    let replica_id = ReplicaId::random(&mut rng);
     let window_index: usize = rng.gen();
     gpu.generate_mask_layer(replica_id, window_index).unwrap();
     timer!(
@@ -50,7 +50,7 @@ fn bench_butterfly(gpu: &mut GPU, samples: usize) -> u64 {
 
 fn bench_combine(gpu: &mut GPU, samples: usize) -> u64 {
     let mut rng = thread_rng();
-    let replica_id = Sha256Domain::random(&mut rng);
+    let replica_id = ReplicaId::random(&mut rng);
     let window_index: usize = rng.gen();
     let data = Layer::random(&mut rng, gpu.leaf_count());
     gpu.generate_mask_layer(replica_id, window_index).unwrap();
@@ -59,7 +59,7 @@ fn bench_combine(gpu: &mut GPU, samples: usize) -> u64 {
 
 fn bench_sealer(gpu: &mut GPU, samples: usize, build_trees: bool) -> u64 {
     let mut rng = thread_rng();
-    let replica_id = Sha256Domain::random(&mut rng);
+    let replica_id = ReplicaId::random(&mut rng);
     let window_index: usize = rng.gen();
     let data = Layer::random(&mut rng, gpu.leaf_count());
     timer!(
