@@ -19,3 +19,4 @@ rand = "0.7"
 structopt = { version = "0.3", default-features = false }
 neptune = { git = "https://github.com/filecoin-project/neptune.git", branch="v1-0-candidate", features=["gpu"] }
 generic-array = "0.13.2"
+log = "0.4.8"
