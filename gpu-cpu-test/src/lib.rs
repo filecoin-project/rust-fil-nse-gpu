@@ -148,31 +148,28 @@ mod tests {
                 window_index,
                 data.clone(),
                 &mut gpu,
+                false,
+                0,
             )
             .unwrap();
 
-            let mut sealed_layers = Vec::new();
-            for l in sealer {
-                sealed_layers.push(l);
-            }
+            let gpu_output = sealer.last().unwrap().unwrap().base;
 
-            let gpu_output = sealed_layers.last().unwrap().clone();
-
-            let gpu_config = to_cpu_config(TEST_CONFIG);
+            let cpu_config = to_cpu_config(TEST_CONFIG);
             let cache_dir = tempfile::tempdir().unwrap();
             let store_config = StoreConfig::new(
                 cache_dir.path(),
                 CacheKey::CommDTree.to_string(),
                 StoreConfig::default_cached_above_base_layer(
-                    gpu_config.num_nodes_window as usize,
+                    cpu_config.num_nodes_window as usize,
                     8,
                 ),
             );
             let store_configs =
-                split_config(store_config.clone(), gpu_config.num_layers()).unwrap();
+                split_config(store_config.clone(), cpu_config.num_layers()).unwrap();
             let mut cpu_output = layer_to_vec_u8(&data);
             nse::encode_with_trees::<OctLCMerkleTree<sha256::Sha256Hasher>>(
-                &gpu_config,
+                &cpu_config,
                 store_configs,
                 window_index as u32,
                 &sha256::Sha256Domain::from(replica_id.0),
