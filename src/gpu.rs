@@ -2,6 +2,7 @@ use super::{
     sources, Config, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node, Sha256Domain,
     COMBINE_BATCH_SIZE,
 };
+use log::info;
 use ocl::builders::KernelBuilder;
 use ocl::{Buffer, Device, OclPrm, Platform, ProQue};
 
@@ -90,6 +91,7 @@ impl GPUContext {
 
 macro_rules! call_kernel {
     ($ctx:expr, $name:expr) => {{
+        info!("Calling {}()...", $name);
         let kernel =
             $ctx
             .build_kernel($name)
@@ -99,6 +101,7 @@ macro_rules! call_kernel {
         }
     }};
     ($ctx:expr, $name:expr, $($arg:expr),+) => {{
+        info!("Calling {}()...", $name);
         let kernel =
             $ctx
             .build_kernel($name)

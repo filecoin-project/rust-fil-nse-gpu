@@ -115,6 +115,8 @@ impl From<Opts> for Config {
 }
 
 fn main() {
+    env_logger::init();
+
     let opts = Opts::from_args();
     println!("Options: {:?}", opts);
 
