@@ -211,8 +211,8 @@ impl<'a> ExactSizeIterator for Sealer<'a> {
     }
 }
 
+#[allow(dead_code)]
 pub struct Unsealer<'a> {
-    sealed_data: Layer,
     key_generator: KeyGenerator<'a>,
 }
 
@@ -221,36 +221,26 @@ impl<'a> Unsealer<'a> {
         config: Config,
         replica_id: Sha256Domain,
         window_index: usize,
-        sealed_data: Layer,
         gpu: &'a mut GPU,
     ) -> NSEResult<Self> {
         Ok(Self {
-            sealed_data,
             key_generator: KeyGenerator::new(config, replica_id, window_index, gpu)?,
         })
     }
-}
 
-impl<'a> Iterator for Unsealer<'a> {
-    type Item = NSEResult<Layer>;
-
-    /// Returns successive layers, starting with mask layer, and ending with sealed replica layer.
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(next_key_layer) = self.key_generator.next() {
-            if self.key_generator.layers_remaining() == 0 {
-                Some(self.key_generator.combine_layer(&self.sealed_data, true))
-            } else {
-                Some(next_key_layer)
-            }
-        } else {
-            None
+    #[allow(dead_code)]
+    fn unseal_range(&mut self, offset: usize, sealed_data: &[Node]) -> NSEResult<Vec<Node>> {
+        while let Some(layer) = self.key_generator.next() {
+            layer?;
         }
-    }
-}
 
-impl<'a> ExactSizeIterator for Unsealer<'a> {
-    fn len(&self) -> usize {
-        self.key_generator.len()
+        self.key_generator
+            .combine_segment(offset, sealed_data, true)
+    }
+
+    #[allow(dead_code)]
+    fn unseal_layer(&mut self, sealed: Layer) -> NSEResult<Layer> {
+        Ok(Layer(self.unseal_range(0, &sealed.0)?))
     }
 }
 
@@ -311,13 +301,26 @@ impl<'a> KeyGenerator<'a> {
     fn combine_layer(&mut self, layer: &Layer, is_decode: bool) -> NSEResult<Layer> {
         self.gpu.combine_layer(layer, is_decode)
     }
+
+    fn combine_segment(
+        &mut self,
+        offset: usize,
+        segment: &[Node],
+        is_decode: bool,
+    ) -> NSEResult<Vec<Node>> {
+        self.gpu.combine_segment(offset, segment, is_decode)
+    }
+
+    fn last_index(&self) -> usize {
+        self.config().num_expander_layers + self.config().num_butterfly_layers
+    }
 }
 
 impl<'a> Iterator for KeyGenerator<'a> {
     type Item = NSEResult<Layer>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let last_index = self.config().num_expander_layers + self.config().num_butterfly_layers;
+        let last_index = self.last_index();
 
         // If current index is last, then we have already finished generating layers.
         if self.current_layer_index >= last_index {
@@ -494,11 +497,23 @@ mod tests {
 
         let sealed_data = sealer.last().unwrap().unwrap().base;
 
-        let unsealer =
-            Unsealer::new(TEST_CONFIG, replica_id, window_index, sealed_data, &mut gpu).unwrap();
+        let mut unsealer = Unsealer::new(TEST_CONFIG, replica_id, window_index, &mut gpu).unwrap();
 
-        let unsealed_data = unsealer.last().unwrap().unwrap();
+        let unsealed_data = unsealer.unseal_layer(sealed_data.clone()).unwrap();
 
         assert_eq!(unsealed_data, original_data);
+
+        let unsealed_data2 = unsealer.unseal_layer(sealed_data.clone()).unwrap();
+        assert_eq!(original_data, unsealed_data2);
+
+        let chunk_size = 50;
+        let mut offset = 0;
+        sealed_data.0.chunks(chunk_size).for_each(|chunk| {
+            let unsealed = unsealer.unseal_range(offset, &chunk).unwrap();
+            let end = offset + chunk.len();
+
+            assert_eq!(&original_data.0[offset..end], unsealed.as_slice());
+            offset = end;
+        })
     }
 }
