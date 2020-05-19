@@ -230,9 +230,35 @@ impl NarrowStackedExpander for GPU {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tests::*;
-    use ff::PrimeField;
+    use ff::{Field, PrimeField};
     use paired::bls12_381::Fr;
+
+    const TEST_CONFIG: Config = Config {
+        k: 4,
+        num_nodes_window: 1024,
+        degree_expander: 96,
+        degree_butterfly: 4,
+        num_expander_layers: 4,
+        num_butterfly_layers: 3,
+    };
+    const TEST_WINDOW_INDEX: usize = 1234567890;
+    const TEST_REPLICA_ID: Sha256Domain = Sha256Domain([123u8; 32]);
+
+    pub fn accumulate(l: &Vec<Node>) -> Node {
+        let mut acc = Fr::zero();
+        for n in l.iter() {
+            acc.add_assign(&n.0);
+        }
+        Node(acc)
+    }
+
+    pub fn incrementing_layer(start: usize, count: usize) -> Layer {
+        Layer(
+            (start..start + count)
+                .map(|i| Node(Fr::from_str(&i.to_string()).unwrap()))
+                .collect(),
+        )
+    }
 
     #[test]
     fn test_generate_mask_layer() {
@@ -252,7 +278,8 @@ mod tests {
     #[test]
     fn test_generate_expander_layer() {
         let mut gpu = GPU::new(TEST_CONFIG).unwrap();
-        gpu.push_layer(&incrementing_layer(123)).unwrap();
+        gpu.push_layer(&incrementing_layer(123, TEST_CONFIG.num_nodes_window))
+            .unwrap();
         let l = gpu
             .generate_expander_layer(TEST_REPLICA_ID, TEST_WINDOW_INDEX, 2)
             .unwrap();
@@ -268,7 +295,8 @@ mod tests {
     #[test]
     fn test_generate_butterfly_layer() {
         let mut gpu = GPU::new(TEST_CONFIG).unwrap();
-        gpu.push_layer(&incrementing_layer(345)).unwrap();
+        gpu.push_layer(&incrementing_layer(345, TEST_CONFIG.num_nodes_window))
+            .unwrap();
         let l = gpu
             .generate_butterfly_layer(TEST_REPLICA_ID, TEST_WINDOW_INDEX, 2)
             .unwrap();
@@ -284,8 +312,8 @@ mod tests {
     #[test]
     fn test_combine_layer() {
         let mut gpu = GPU::new(TEST_CONFIG).unwrap();
-        let data = incrementing_layer(567);
-        let mask = incrementing_layer(234);
+        let data = incrementing_layer(567, TEST_CONFIG.num_nodes_window);
+        let mask = incrementing_layer(234, TEST_CONFIG.num_nodes_window);
         gpu.push_layer(&mask).unwrap();
         let encode = gpu.combine_segment(0, &data.0, false).unwrap();
         let decode = gpu.combine_segment(0, &data.0, true).unwrap();

@@ -17,6 +17,8 @@ impl From<ocl::Error> for GPUError {
 pub enum NSEError {
     #[error("Ocl Error: {0}")]
     GPU(#[from] GPUError),
+    #[error("Neptune Error: {0}")]
+    Neptune(#[from] neptune::error::Error),
 }
 
 pub type NSEResult<T> = std::result::Result<T, NSEError>;

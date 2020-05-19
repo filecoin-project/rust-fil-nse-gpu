@@ -4,7 +4,10 @@ mod sources;
 
 use error::*;
 use ff::Field;
+use generic_array::typenum::U8;
 pub use gpu::*;
+use neptune::batch_hasher::BatcherType;
+use neptune::tree_builder::{TreeBuilder, TreeBuilderTrait};
 use paired::bls12_381::Fr;
 use rand::{Rng, RngCore};
 
@@ -13,11 +16,36 @@ const COMBINE_BATCH_SIZE: usize = 500000;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 #[repr(transparent)]
+/// Nodes are always assumed to be in Montgomery Form.
 pub struct Node(pub Fr);
 
 impl Node {
     pub fn random<R: RngCore>(rng: &mut R) -> Self {
         Node(Fr::random(rng))
+    }
+
+    /// Convert a slice of `Node`s to a slice of `Fr`s.
+    /// This conversion is accurate because `Node`s are in Montgomery Form.
+    fn as_frs<'a>(nodes: &'a [Node]) -> &'a [Fr] {
+        assert_eq!(
+            std::mem::size_of::<Fr>(),
+            std::mem::size_of::<Node>(),
+            "Node should be zero-size wrapper around Fr representation"
+        );
+
+        unsafe { std::slice::from_raw_parts(nodes.as_ptr() as *const () as *const Fr, nodes.len()) }
+    }
+
+    /// Convert a slice of `Fr`s to a slice of `Node`s.
+    /// This conversion is accurate because `Node`s are in Montgomery Form.
+    fn from_frs<'a>(frs: &'a [Fr]) -> &'a [Node] {
+        assert_eq!(
+            std::mem::size_of::<Fr>(),
+            std::mem::size_of::<Node>(),
+            "Node should be zero-size wrapper around Fr representation"
+        );
+
+        unsafe { std::slice::from_raw_parts(frs.as_ptr() as *const () as *const Node, frs.len()) }
     }
 }
 
@@ -44,6 +72,12 @@ impl Sha256Domain {
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Layer(pub Vec<Node>);
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct LayerOutput {
+    pub base: Layer,
+    pub tree: Vec<Node>,
+}
 
 impl Layer {
     pub fn random<R: RngCore>(rng: &mut R, node_count: usize) -> Self {
@@ -107,7 +141,10 @@ pub struct Config {
 pub struct Sealer<'a> {
     original_data: Layer,
     key_generator: KeyGenerator<'a>,
+    tree_builder: Option<TreeBuilder<'a, U8>>,
 }
+
+const TREE_BUILDER_BATCH_SIZE: usize = 400_000;
 
 impl<'a> Sealer<'a> {
     pub fn new(
@@ -116,30 +153,52 @@ impl<'a> Sealer<'a> {
         window_index: usize,
         original_data: Layer,
         gpu: &'a mut GPU,
+        build_trees: bool,
+        rows_to_discard: usize,
     ) -> NSEResult<Self> {
+        let leaf_count = gpu.leaf_count();
         Ok(Self {
             original_data,
             key_generator: KeyGenerator::new(config, replica_id, window_index, gpu)?,
+            // TODO: ensure tree_builder and key_generator use the same device (unless otherwise specified).
+            tree_builder: if build_trees {
+                Some(TreeBuilder::<U8>::new(
+                    Some(BatcherType::GPU),
+                    leaf_count,
+                    TREE_BUILDER_BATCH_SIZE,
+                    rows_to_discard,
+                )?)
+            } else {
+                None
+            },
         })
     }
 }
 
 impl<'a> Iterator for Sealer<'a> {
-    type Item = Layer;
+    type Item = NSEResult<LayerOutput>;
 
     /// Returns successive layers, starting with mask layer, and ending with sealed replica layer.
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(next_key_layer) = self.key_generator.next() {
-            if self.key_generator.layers_remaining() == 0 {
-                Some(
-                    // TODO: Remove `unwrap()`, handle errors
-                    self.key_generator
-                        .combine_layer(&self.original_data, false)
-                        .unwrap(),
-                )
-            } else {
-                Some(next_key_layer)
-            }
+            Some(|| -> NSEResult<LayerOutput> {
+                let layer = if self.key_generator.layers_remaining() == 0 {
+                    self.key_generator.combine_layer(&self.original_data, false)
+                } else {
+                    next_key_layer
+                }?;
+                if let Some(tree_builder) = &mut self.tree_builder {
+                    let frs = Node::as_frs(layer.0.as_slice());
+                    let (_, fr_tree) = tree_builder.add_final_leaves(frs)?;
+                    let tree = Node::from_frs(&fr_tree).to_vec();
+                    Ok(LayerOutput { base: layer, tree })
+                } else {
+                    Ok(LayerOutput {
+                        base: layer,
+                        tree: Vec::new(), // Maybe change Vec<Node> to Option<Vec<Node>> and return None?
+                    })
+                }
+            }())
         } else {
             None
         }
@@ -173,18 +232,13 @@ impl<'a> Unsealer<'a> {
 }
 
 impl<'a> Iterator for Unsealer<'a> {
-    type Item = Layer;
+    type Item = NSEResult<Layer>;
 
     /// Returns successive layers, starting with mask layer, and ending with sealed replica layer.
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(next_key_layer) = self.key_generator.next() {
             if self.key_generator.layers_remaining() == 0 {
-                Some(
-                    // TODO: Remove `unwrap()`, handle errors
-                    self.key_generator
-                        .combine_layer(&self.sealed_data, true)
-                        .unwrap(),
-                )
+                Some(self.key_generator.combine_layer(&self.sealed_data, true))
             } else {
                 Some(next_key_layer)
             }
@@ -260,7 +314,7 @@ impl<'a> KeyGenerator<'a> {
 }
 
 impl<'a> Iterator for KeyGenerator<'a> {
-    type Item = Layer;
+    type Item = NSEResult<Layer>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let last_index = self.config().num_expander_layers + self.config().num_butterfly_layers;
@@ -273,22 +327,19 @@ impl<'a> Iterator for KeyGenerator<'a> {
 
         // First layer is mask layer.
         if self.current_layer_index == 1 {
-            // TODO: Remove `unwrap()`, handle errors
-            return Some(self.generate_mask_layer().unwrap());
+            return Some(self.generate_mask_layer());
         }
 
         // When current index equals number of expander layers, we need to generate the last expander layer.
         // Before that, generate earlier expander layers.
         if self.current_layer_index <= self.config().num_expander_layers {
-            // TODO: Remove `unwrap()`, handle errors
-            return Some(self.generate_expander_layer().unwrap());
+            return Some(self.generate_expander_layer());
         }
 
         // When current index equals last index (having been incremented since the first check),
         // we need to generate the last butterfly layer. Before that, generate earlier butterfly layers.
         if self.current_layer_index <= last_index {
-            // TODO: Remove `unwrap()`, handle errors
-            return Some(self.generate_butterfly_layer().unwrap());
+            return Some(self.generate_butterfly_layer());
         };
 
         unreachable!();
@@ -304,60 +355,118 @@ impl<'a> ExactSizeIterator for KeyGenerator<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ff::{Field, PrimeField};
-    use paired::bls12_381::Fr;
+    use ff::PrimeField;
+    use paired::bls12_381::{Fr, FrRepr};
 
-    pub const TEST_CONFIG: Config = Config {
-        k: 4,
-        num_nodes_window: 1024,
+    const TEST_CONFIG: Config = Config {
+        k: 2,
+        num_nodes_window: 512,
         degree_expander: 96,
         degree_butterfly: 4,
         num_expander_layers: 4,
         num_butterfly_layers: 3,
     };
-    pub const TEST_WINDOW_INDEX: usize = 1234567890;
-    pub const TEST_REPLICA_ID: Sha256Domain = Sha256Domain([123u8; 32]);
+    const TEST_WINDOW_INDEX: usize = 1234567890;
+    const TEST_REPLICA_ID: Sha256Domain = Sha256Domain([123u8; 32]);
 
-    pub fn incrementing_layer(start: usize) -> Layer {
+    pub fn incrementing_layer(start: usize, count: usize) -> Layer {
         Layer(
-            (start..start + TEST_CONFIG.num_nodes_window)
+            (start..start + count)
                 .map(|i| Node(Fr::from_str(&i.to_string()).unwrap()))
                 .collect(),
         )
     }
 
-    pub fn accumulate(l: &Vec<Node>) -> Node {
-        let mut acc = Fr::zero();
-        for n in l.iter() {
-            acc.add_assign(&n.0);
-        }
-        Node(acc)
-    }
-
     #[test]
     fn test_sealer() {
         let mut gpu = GPU::new(TEST_CONFIG).unwrap();
-        let original_data = incrementing_layer(123);
+        let original_data = incrementing_layer(123, TEST_CONFIG.num_nodes_window);
         let sealer = Sealer::new(
             TEST_CONFIG,
             TEST_REPLICA_ID,
             TEST_WINDOW_INDEX,
             original_data.clone(),
             &mut gpu,
+            true,
+            2,
         )
         .unwrap();
 
-        let mut accs = Vec::new();
-        for l in sealer {
-            accs.push(accumulate(&l.0));
-        }
+        let roots = sealer
+            .map(|r| {
+                let l = r.unwrap();
+                assert_eq!(1, l.tree.len());
+                l.tree[l.tree.len() - 1]
+            })
+            .collect::<Vec<_>>();
 
         assert_eq!(
-            Fr::from_str(
-                "7813907933754549568041194750577494363246706453616511648622478124833387777950"
-            )
-            .unwrap(),
-            accumulate(&accs).0
+            roots[..7].to_vec(),
+            vec![
+                Node(
+                    Fr::from_repr(FrRepr([
+                        0x29d916d6dd01de4b,
+                        0xc8eca6a6d5909595,
+                        0xc3834b5166d97f84,
+                        0x069f8edbe4ac2ca8
+                    ]))
+                    .unwrap()
+                ),
+                Node(
+                    Fr::from_repr(FrRepr([
+                        0xb7ed798f0d8fc75f,
+                        0x02bafc9a095b278c,
+                        0xc7ce20e34b57cdc2,
+                        0x0eb959501a15a7b7
+                    ]))
+                    .unwrap()
+                ),
+                Node(
+                    Fr::from_repr(FrRepr([
+                        0xeb376a4cd5a4b22b,
+                        0xd03d4014691e2cf9,
+                        0xfc3a00e245af4177,
+                        0x57c51f9f14cd1f28
+                    ]))
+                    .unwrap()
+                ),
+                Node(
+                    Fr::from_repr(FrRepr([
+                        0xe1b104f8df8515ae,
+                        0x76c1b43dcae3b910,
+                        0x53a8519a68a36613,
+                        0x132d7308b096a3af
+                    ]))
+                    .unwrap()
+                ),
+                Node(
+                    Fr::from_repr(FrRepr([
+                        0xcae76c02a4de443d,
+                        0x89712fb5b4154e75,
+                        0x8a0e224ad938e255,
+                        0x208023a9ca5d55a5
+                    ]))
+                    .unwrap()
+                ),
+                Node(
+                    Fr::from_repr(FrRepr([
+                        0x6735f804e9cfd5a6,
+                        0x93f73743d86c02fc,
+                        0x9bf7a43249233897,
+                        0x6d3148fe18dc7af4
+                    ]))
+                    .unwrap()
+                ),
+                Node(
+                    Fr::from_repr(FrRepr([
+                        0xf614f7a07a4e36ec,
+                        0xce7d33eaa56a61a6,
+                        0xec0d0cfa0f62eae6,
+                        0x706808aed9e32d6f
+                    ]))
+                    .unwrap()
+                )
+            ]
         );
     }
 
@@ -378,23 +487,17 @@ mod tests {
             window_index,
             original_data.clone(),
             &mut gpu,
+            false,
+            2,
         )
         .unwrap();
-        let mut sealed_layers = Vec::new();
-        for l in sealer {
-            sealed_layers.push(l);
-        }
 
-        let sealed_data = sealed_layers.last().unwrap().clone();
+        let sealed_data = sealer.last().unwrap().unwrap().base;
 
         let unsealer =
             Unsealer::new(TEST_CONFIG, replica_id, window_index, sealed_data, &mut gpu).unwrap();
-        let mut unsealed_layers = Vec::new();
-        for l in unsealer {
-            unsealed_layers.push(l);
-        }
 
-        let unsealed_data = unsealed_layers.last().unwrap().clone();
+        let unsealed_data = unsealer.last().unwrap().unwrap();
 
         assert_eq!(unsealed_data, original_data);
     }
