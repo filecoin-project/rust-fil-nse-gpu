@@ -6,7 +6,7 @@ mod tests {
     use rand::{thread_rng, Rng};
     use rust_fil_nse_gpu::*;
     use storage_proofs::cache_key::CacheKey;
-    use storage_proofs::hasher::sha256;
+    use storage_proofs::hasher::poseidon;
     use storage_proofs::merkle::split_config;
     use storage_proofs::merkle::OctLCMerkleTree;
     use storage_proofs::porep::nse;
@@ -30,6 +30,10 @@ mod tests {
             num_butterfly_layers: conf.num_butterfly_layers,
             sector_size: 0,
         }
+    }
+
+    fn to_poseidon_domain(sha256: Sha256Domain) -> poseidon::PoseidonDomain {
+        unsafe { std::mem::transmute::<Sha256Domain, poseidon::PoseidonDomain>(sha256) }
     }
 
     fn accumulate(l: &Vec<Node>) -> Node {
@@ -88,7 +92,7 @@ mod tests {
             nse::expander_layer(
                 &to_cpu_config(TEST_CONFIG),
                 window_index as u32,
-                &sha256::Sha256Domain::from(replica_id.0),
+                &to_poseidon_domain(replica_id),
                 layer_index as u32,
                 &layer_a,
                 &mut layer_b,
@@ -121,7 +125,7 @@ mod tests {
             nse::butterfly_layer(
                 &to_cpu_config(TEST_CONFIG),
                 window_index as u32,
-                &sha256::Sha256Domain::from(replica_id.0),
+                &to_poseidon_domain(replica_id),
                 layer_index as u32,
                 &layer_a,
                 &mut layer_b,
@@ -168,11 +172,11 @@ mod tests {
             let store_configs =
                 split_config(store_config.clone(), cpu_config.num_layers()).unwrap();
             let mut cpu_output = layer_to_vec_u8(&data);
-            nse::encode_with_trees::<OctLCMerkleTree<sha256::Sha256Hasher>>(
+            nse::encode_with_trees::<OctLCMerkleTree<poseidon::PoseidonHasher>>(
                 &cpu_config,
                 store_configs,
                 window_index as u32,
-                &sha256::Sha256Domain::from(replica_id.0),
+                &to_poseidon_domain(replica_id),
                 &mut cpu_output,
             )
             .unwrap();
