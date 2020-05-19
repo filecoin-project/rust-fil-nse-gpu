@@ -36,6 +36,10 @@ mod tests {
         unsafe { std::mem::transmute::<Sha256Domain, poseidon::PoseidonDomain>(sha256) }
     }
 
+    fn node_to_poseidon_domain(node: Node) -> poseidon::PoseidonDomain {
+        unsafe { std::mem::transmute::<FrRepr, poseidon::PoseidonDomain>(node.0.into_repr()) }
+    }
+
     fn accumulate(l: &Vec<Node>) -> Node {
         let mut acc = Fr::zero();
         for n in l.iter() {
@@ -152,12 +156,17 @@ mod tests {
                 window_index,
                 data.clone(),
                 &mut gpu,
-                false,
-                0,
+                true,
+                2,
             )
             .unwrap();
 
-            let gpu_output = sealer.last().unwrap().unwrap().base;
+            let gpu_layers = sealer.map(|r| r.unwrap()).collect::<Vec<_>>();
+            let gpu_output = gpu_layers.iter().last().unwrap().base.clone();
+            let gpu_roots = gpu_layers.iter().map(|l| {
+                assert_eq!(l.tree.len(), 1);
+                node_to_poseidon_domain(l.tree[0])
+            });
 
             let cpu_config = to_cpu_config(TEST_CONFIG);
             let cache_dir = tempfile::tempdir().unwrap();
@@ -172,17 +181,22 @@ mod tests {
             let store_configs =
                 split_config(store_config.clone(), cpu_config.num_layers()).unwrap();
             let mut cpu_output = layer_to_vec_u8(&data);
-            nse::encode_with_trees::<OctLCMerkleTree<poseidon::PoseidonHasher>>(
-                &cpu_config,
-                store_configs,
-                window_index as u32,
-                &to_poseidon_domain(replica_id),
-                &mut cpu_output,
-            )
-            .unwrap();
+            let (cpu_trees, _) =
+                nse::encode_with_trees::<OctLCMerkleTree<poseidon::PoseidonHasher>>(
+                    &cpu_config,
+                    store_configs,
+                    window_index as u32,
+                    &to_poseidon_domain(replica_id),
+                    &mut cpu_output,
+                )
+                .unwrap();
             let cpu_output = vec_u8_to_layer(&cpu_output);
+            let cpu_roots = cpu_trees.iter().map(|t| t.root());
 
-            assert_eq!(cpu_output, gpu_output);
+            assert_eq!(gpu_output, cpu_output);
+            for (gpu_root, cpu_root) in gpu_roots.zip(cpu_roots) {
+                assert_eq!(gpu_root, cpu_root);
+            }
         }
     }
 }
