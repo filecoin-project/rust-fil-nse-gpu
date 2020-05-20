@@ -2,6 +2,7 @@ use super::{
     sources, Config, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node, Sha256Domain,
     COMBINE_BATCH_SIZE,
 };
+use log::info;
 use ocl::builders::KernelBuilder;
 use ocl::{Buffer, Device, OclPrm, Platform, ProQue};
 
@@ -34,12 +35,20 @@ struct GPUContext {
 
 impl GPUContext {
     pub fn new(device: Device, config: Config) -> GPUResult<GPUContext> {
+        info!(
+            "Initializing a new NSE GPU context on device: {}",
+            device.name()?
+        );
+
+        info!("Compiling kernels...");
         let code = sources::generate_nse_program(config);
         let pro_que = ProQue::builder()
             .device(device)
             .src(code)
             .dims(config.num_nodes_window)
             .build()?;
+
+        info!("Creating buffers...");
         let current_layer = pro_que.create_buffer::<Node>()?;
         let kernel_buffer = pro_que.create_buffer::<Node>()?;
         Ok(GPUContext {
@@ -51,6 +60,7 @@ impl GPUContext {
     }
 
     pub(crate) fn build_kernel(&mut self, kernel_name: &str) -> KernelBuilder {
+        info!("Calling {}()...", kernel_name);
         let mut k = self.pro_que.kernel_builder(kernel_name);
         k.global_work_size([self.leaf_count()]);
 
@@ -68,6 +78,7 @@ impl GPUContext {
     }
 
     pub(crate) fn push_current(&mut self, segment: &Vec<Node>, offset: usize) -> GPUResult<()> {
+        info!("Pushing data...");
         self.current_layer
             .create_sub_buffer(None, offset, segment.len())?
             .write(segment)
@@ -76,6 +87,7 @@ impl GPUContext {
     }
 
     pub(crate) fn pull_current(&mut self, segment: &mut Vec<Node>, offset: usize) -> GPUResult<()> {
+        info!("Pulling results...");
         self.current_layer
             .create_sub_buffer(None, offset, segment.len())?
             .read(segment)
