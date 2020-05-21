@@ -70,7 +70,7 @@ impl Sha256Domain {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Default)]
 pub struct Layer(pub Vec<Node>);
 
 #[derive(PartialEq, Debug, Clone)]
@@ -174,6 +174,42 @@ impl<'a> Sealer<'a> {
             },
         })
     }
+
+    pub fn new_from_layer(
+        provided_layer_index: usize,
+        provided_layer: &Layer,
+        config: Config,
+        replica_id: Sha256Domain,
+        window_index: usize,
+        original_data: Layer,
+        gpu: &'a mut GPU,
+        build_trees: bool,
+        rows_to_discard: usize,
+    ) -> NSEResult<Self> {
+        let leaf_count = gpu.leaf_count();
+        Ok(Self {
+            original_data,
+            key_generator: KeyGenerator::new_from_layer(
+                provided_layer_index,
+                provided_layer,
+                config,
+                replica_id,
+                window_index,
+                gpu,
+            )?,
+            // TODO: ensure tree_builder and key_generator use the same device (unless otherwise specified).
+            tree_builder: if build_trees {
+                Some(TreeBuilder::<U8>::new(
+                    Some(BatcherType::GPU),
+                    leaf_count,
+                    TREE_BUILDER_BATCH_SIZE,
+                    rows_to_discard,
+                )?)
+            } else {
+                None
+            },
+        })
+    }
 }
 
 impl<'a> Iterator for Sealer<'a> {
@@ -212,8 +248,8 @@ impl<'a> ExactSizeIterator for Sealer<'a> {
     }
 }
 
-#[allow(dead_code)]
 pub struct Unsealer<'a> {
+    #[allow(dead_code)]
     key_generator: KeyGenerator<'a>,
 }
 
@@ -264,6 +300,25 @@ impl<'a> KeyGenerator<'a> {
             replica_id,
             window_index,
             current_layer_index: 0, // Initial value of 0 means the current layer precedes any generated layer.
+            gpu,
+        })
+    }
+
+    fn new_from_layer(
+        provided_layer_index: usize,
+        provided_layer: &Layer,
+        config: Config,
+        replica_id: Sha256Domain,
+        window_index: usize,
+        gpu: &'a mut GPU,
+    ) -> NSEResult<Self> {
+        assert_eq!(config.num_nodes_window, gpu.leaf_count());
+
+        gpu.push_layer(&provided_layer)?;
+        Ok(Self {
+            replica_id,
+            window_index,
+            current_layer_index: 1 + provided_layer_index,
             gpu,
         })
     }
@@ -405,13 +460,17 @@ mod tests {
         )
         .unwrap();
 
-        let roots = sealer
-            .map(|r| {
-                let l = r.unwrap();
+        let layer_index_to_restart = 3;
+        let layers = sealer.map(|x| x.unwrap()).collect::<Vec<_>>();
+        let roots = layers
+            .iter()
+            .map(|l| {
                 assert_eq!(1, l.tree.len());
                 l.tree[l.tree.len() - 1]
             })
             .collect::<Vec<_>>();
+
+        let layer_to_restart = &layers[layer_index_to_restart].base;
 
         assert_eq!(
             roots[..7].to_vec(),
@@ -480,6 +539,32 @@ mod tests {
                     .unwrap()
                 )
             ]
+        );
+
+        let restarted_sealer = Sealer::new_from_layer(
+            layer_index_to_restart,
+            layer_to_restart,
+            TEST_CONFIG,
+            TEST_REPLICA_ID,
+            TEST_WINDOW_INDEX,
+            original_data.clone(),
+            &mut gpu,
+            true,
+            2,
+        )
+        .unwrap();
+
+        let restarted_roots = restarted_sealer
+            .map(|r| {
+                let l = r.unwrap();
+                assert_eq!(1, l.tree.len());
+                l.tree[l.tree.len() - 1]
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            &roots[layer_index_to_restart + 1..],
+            restarted_roots.as_slice()
         );
     }
 
