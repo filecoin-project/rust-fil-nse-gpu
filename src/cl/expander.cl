@@ -50,7 +50,7 @@ uint get_expanded_parent(bit_stream *stream, uint i) {
 
 __kernel void generate_expander(__global Fr *input,
                                 __global Fr *output,
-                                sha256_domain replica_id,
+                                replica_id id,
                                 uint window_index,
                                 uint layer_index) {
 
@@ -59,7 +59,7 @@ __kernel void generate_expander(__global Fr *input,
   bit_stream stream = gen_stream(node); // 1152 Bytes ~ 1KB
 
   sha256_domain state = sha256_INIT;
-  state = sha256_update(state, hash_prefix(layer_index, node, window_index, replica_id));
+  state = sha256_update(state, hash_prefix(layer_index, node, window_index, id));
 
   for(uint i = 0; i < DEGREE_EXPANDER / 2; i++) {
     uint i_1 = i * 2;

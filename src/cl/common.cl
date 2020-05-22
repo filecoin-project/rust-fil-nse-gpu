@@ -2,6 +2,10 @@
 #define NUM_LAYERS (NUM_EXPANDER_LAYERS + NUM_BUTTERFLY_LAYERS)
 #define MODULO_N_MASK (N - 1)
 
+typedef struct {
+  uint vals[8];
+} replica_id;
+
 __kernel void to_montgomery(__global Fr *buffer) {
   uint node = get_global_id(0);
   buffer[node] = Fr_mont(buffer[node]);
@@ -24,13 +28,13 @@ uint reverse_bytes(uint a) {
          (a & 0x00ff0000) >> 8 | (a & 0xff000000) >> 24;
 }
 
-sha256_block hash_prefix(uint layer_index, uint node_index, uint window_index, sha256_domain replica_id) {
+sha256_block hash_prefix(uint layer_index, uint node_index, uint window_index, replica_id id) {
   sha256_block data = sha256_ZERO;
   data.vals[0] = layer_index;
   data.vals[1] = node_index;
   data.vals[2] = window_index;
   for(uint i = 0; i < 8; i++) {
-    data.vals[8 + i] = reverse_bytes(replica_id.vals[i]);
+    data.vals[8 + i] = reverse_bytes(id.vals[i]);
   }
   return data;
 }

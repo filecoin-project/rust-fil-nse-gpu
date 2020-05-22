@@ -6,7 +6,7 @@ mod tests {
     use rand::{thread_rng, Rng};
     use rust_fil_nse_gpu::*;
     use storage_proofs::cache_key::CacheKey;
-    use storage_proofs::hasher::sha256;
+    use storage_proofs::hasher::poseidon;
     use storage_proofs::merkle::split_config;
     use storage_proofs::merkle::OctLCMerkleTree;
     use storage_proofs::porep::nse;
@@ -30,6 +30,14 @@ mod tests {
             num_butterfly_layers: conf.num_butterfly_layers,
             sector_size: 0,
         }
+    }
+
+    fn replica_id_to_poseidon_domain(replica_id: ReplicaId) -> poseidon::PoseidonDomain {
+        unsafe { std::mem::transmute::<ReplicaId, poseidon::PoseidonDomain>(replica_id) }
+    }
+
+    fn node_to_poseidon_domain(node: Node) -> poseidon::PoseidonDomain {
+        unsafe { std::mem::transmute::<FrRepr, poseidon::PoseidonDomain>(node.0.into_repr()) }
     }
 
     fn accumulate(l: &Vec<Node>) -> Node {
@@ -74,7 +82,7 @@ mod tests {
 
         for _ in 0..10 {
             let prev_layer = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
-            let replica_id = Sha256Domain::random(&mut rng);
+            let replica_id = ReplicaId::random(&mut rng);
             let window_index: usize = rng.gen();
             let layer_index = 2;
 
@@ -88,7 +96,7 @@ mod tests {
             nse::expander_layer(
                 &to_cpu_config(TEST_CONFIG),
                 window_index as u32,
-                &sha256::Sha256Domain::from(replica_id.0),
+                &replica_id_to_poseidon_domain(replica_id),
                 layer_index as u32,
                 &layer_a,
                 &mut layer_b,
@@ -107,7 +115,7 @@ mod tests {
 
         for _ in 0..10 {
             let prev_layer = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
-            let replica_id = Sha256Domain::random(&mut rng);
+            let replica_id = ReplicaId::random(&mut rng);
             let window_index: usize = rng.gen();
             let layer_index = 5;
 
@@ -121,7 +129,7 @@ mod tests {
             nse::butterfly_layer(
                 &to_cpu_config(TEST_CONFIG),
                 window_index as u32,
-                &sha256::Sha256Domain::from(replica_id.0),
+                &replica_id_to_poseidon_domain(replica_id),
                 layer_index as u32,
                 &layer_a,
                 &mut layer_b,
@@ -140,7 +148,7 @@ mod tests {
 
         for _ in 0..10 {
             let data = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
-            let replica_id = Sha256Domain::random(&mut rng);
+            let replica_id = ReplicaId::random(&mut rng);
             let window_index: usize = rng.gen();
             let sealer = Sealer::new(
                 TEST_CONFIG,
@@ -148,12 +156,17 @@ mod tests {
                 window_index,
                 data.clone(),
                 &mut gpu,
-                false,
-                0,
+                true,
+                2,
             )
             .unwrap();
 
-            let gpu_output = sealer.last().unwrap().unwrap().base;
+            let gpu_layers = sealer.map(|r| r.unwrap()).collect::<Vec<_>>();
+            let gpu_output = gpu_layers.iter().last().unwrap().base.clone();
+            let gpu_roots = gpu_layers.iter().map(|l| {
+                assert_eq!(l.tree.len(), 1);
+                node_to_poseidon_domain(l.tree[0])
+            });
 
             let cpu_config = to_cpu_config(TEST_CONFIG);
             let cache_dir = tempfile::tempdir().unwrap();
@@ -168,17 +181,22 @@ mod tests {
             let store_configs =
                 split_config(store_config.clone(), cpu_config.num_layers()).unwrap();
             let mut cpu_output = layer_to_vec_u8(&data);
-            nse::encode_with_trees::<OctLCMerkleTree<sha256::Sha256Hasher>>(
-                &cpu_config,
-                store_configs,
-                window_index as u32,
-                &sha256::Sha256Domain::from(replica_id.0),
-                &mut cpu_output,
-            )
-            .unwrap();
+            let (cpu_trees, _) =
+                nse::encode_with_trees::<OctLCMerkleTree<poseidon::PoseidonHasher>>(
+                    &cpu_config,
+                    store_configs,
+                    window_index as u32,
+                    &replica_id_to_poseidon_domain(replica_id),
+                    &mut cpu_output,
+                )
+                .unwrap();
             let cpu_output = vec_u8_to_layer(&cpu_output);
+            let cpu_roots = cpu_trees.iter().map(|t| t.root());
 
-            assert_eq!(cpu_output, gpu_output);
+            assert_eq!(gpu_output, cpu_output);
+            for (gpu_root, cpu_root) in gpu_roots.zip(cpu_roots) {
+                assert_eq!(gpu_root, cpu_root);
+            }
         }
     }
 }
