@@ -104,6 +104,7 @@ pub trait NarrowStackedExpander: Sized {
         window_index: usize,
         layer_index: usize,
     ) -> NSEResult<Layer>;
+    fn finalize(&mut self) -> NSEResult<()>;
     // Combine functions need to get `&mut self`, as they modify internal state of GPU buffers
     fn combine_layer(&mut self, layer: &Layer, is_decode: bool) -> NSEResult<Layer> {
         Ok(Layer(self.combine_segment(0, &layer.0, is_decode)?))
@@ -302,6 +303,10 @@ impl<'a> KeyGenerator<'a> {
         self.gpu.combine_layer(layer, is_decode)
     }
 
+    fn finalize(&mut self) -> NSEResult<()> {
+        self.gpu.finalize()
+    }
+
     fn combine_segment(
         &mut self,
         offset: usize,
@@ -342,7 +347,12 @@ impl<'a> Iterator for KeyGenerator<'a> {
         // When current index equals last index (having been incremented since the first check),
         // we need to generate the last butterfly layer. Before that, generate earlier butterfly layers.
         if self.current_layer_index <= last_index {
-            return Some(self.generate_butterfly_layer());
+            return Some(self.generate_butterfly_layer().and_then(|l| {
+                if self.current_layer_index == last_index {
+                    self.finalize()?;
+                }
+                Ok(l)
+            }));
         };
 
         unreachable!();

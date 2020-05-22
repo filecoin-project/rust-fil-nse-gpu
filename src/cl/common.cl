@@ -2,8 +2,13 @@
 #define NUM_LAYERS (NUM_EXPANDER_LAYERS + NUM_BUTTERFLY_LAYERS)
 #define MODULO_N_MASK (N - 1)
 
-__kernel void generate_montgomery(__global Fr *output,
-                                  __global Fr *input) {
+__kernel void to_montgomery(__global Fr *buffer) {
+  uint node = get_global_id(0);
+  buffer[node] = Fr_mont(buffer[node]);
+}
+
+__kernel void generate_montgomery(__global Fr *input,
+                                  __global Fr *output) {
   uint node = get_global_id(0);
   output[node] = Fr_mont(input[node]);
 }

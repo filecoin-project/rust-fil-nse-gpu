@@ -1,5 +1,4 @@
-__kernel void generate_mask(__global Fr *_,
-                            __global Fr *output,
+__kernel void generate_mask(__global Fr *output,
                             sha256_domain replica_id,
                             uint window_index) {
 

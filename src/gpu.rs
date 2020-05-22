@@ -21,6 +21,22 @@ fn get_devices(platform_name: &str) -> GPUResult<Vec<Device>> {
     }
 }
 
+fn write_buffer<T: OclPrm>(buff: &mut Buffer<T>, offset: usize, segment: &[T]) -> GPUResult<()> {
+    info!("Pushing data...");
+    buff.create_sub_buffer(None, offset, segment.len())?
+        .write(segment)
+        .enq()?;
+    Ok(())
+}
+
+fn read_buffer<T: OclPrm>(buff: &Buffer<T>, offset: usize, segment: &mut [T]) -> GPUResult<()> {
+    info!("Pulling results...");
+    buff.create_sub_buffer(None, offset, segment.len())?
+        .read(segment)
+        .enq()?;
+    Ok(())
+}
+
 // Make `Node` movable to GPU buffers by implementing `OclPrm`
 unsafe impl OclPrm for Node {}
 unsafe impl OclPrm for Sha256Domain {}
@@ -29,8 +45,6 @@ unsafe impl OclPrm for Sha256Domain {}
 struct GPUContext {
     pro_que: ProQue,
     config: Config,
-    current_layer: Buffer<Node>, // This has the last generated layer (In ordinary form)
-    kernel_buffer: Buffer<Node>, // Kernel output always goes here (Sometimes is used as an input)
 }
 
 impl GPUContext {
@@ -48,51 +62,19 @@ impl GPUContext {
             .dims(config.num_nodes_window)
             .build()?;
 
-        info!("Creating buffers...");
-        let current_layer = pro_que.create_buffer::<Node>()?;
-        let kernel_buffer = pro_que.create_buffer::<Node>()?;
-        Ok(GPUContext {
-            pro_que,
-            config,
-            current_layer,
-            kernel_buffer,
-        })
+        Ok(GPUContext { pro_que, config })
     }
 
     pub(crate) fn build_kernel(&mut self, kernel_name: &str) -> KernelBuilder {
         info!("Calling {}()...", kernel_name);
         let mut k = self.pro_que.kernel_builder(kernel_name);
         k.global_work_size([self.leaf_count()]);
-
-        // `current_layer` and `kernel_buffer` buffers are passed to
-        // all kernel calls by default, any kernel argument passed
-        // to `call_kernel!` comes after these.
-        k.arg(&self.current_layer);
-        k.arg(&self.kernel_buffer);
-
         k
     }
 
-    pub(crate) fn make_buffer_current(&mut self) {
-        std::mem::swap(&mut self.kernel_buffer, &mut self.current_layer);
-    }
-
-    pub(crate) fn push_current(&mut self, segment: &Vec<Node>, offset: usize) -> GPUResult<()> {
-        info!("Pushing data...");
-        self.current_layer
-            .create_sub_buffer(None, offset, segment.len())?
-            .write(segment)
-            .enq()?;
-        Ok(())
-    }
-
-    pub(crate) fn pull_current(&mut self, segment: &mut Vec<Node>, offset: usize) -> GPUResult<()> {
-        info!("Pulling results...");
-        self.current_layer
-            .create_sub_buffer(None, offset, segment.len())?
-            .read(segment)
-            .enq()?;
-        Ok(())
+    pub(crate) fn create_buffer(&mut self) -> GPUResult<Buffer<Node>> {
+        info!("Creating buffer...");
+        Ok(self.pro_que.create_buffer::<Node>()?)
     }
 
     pub(crate) fn leaf_count(&self) -> usize {
@@ -101,16 +83,7 @@ impl GPUContext {
 }
 
 macro_rules! call_kernel {
-    ($ctx:expr, $name:expr) => {{
-        let kernel =
-            $ctx
-            .build_kernel($name)
-            .build()?;
-        unsafe {
-            kernel.enq()?;
-        }
-    }};
-    ($ctx:expr, $name:expr, $($arg:expr),+) => {{
+    ($ctx:expr, $name:expr, $($arg:expr),*) => {{
         let kernel =
             $ctx
             .build_kernel($name)
@@ -125,15 +98,26 @@ macro_rules! call_kernel {
 pub struct GPU {
     context: GPUContext,
     combine_batch_size: usize,
+    current_layer: Buffer<Node>, // This has the last generated layer (In ordinary form)
     pub config: Config,
 }
 
 impl GPU {
+    fn replace_buffer(&mut self, buff: Buffer<Node>) {
+        std::mem::replace(&mut self.current_layer, buff);
+    }
+
     // Overwrite current layer
     pub fn push_layer(&mut self, layer: &Layer) -> NSEResult<()> {
-        self.context.push_current(&layer.0, 0)?; // Push montgomery form in current_layer
-        call_kernel!(self.context, "generate_ordinary"); // Calculate ordinary form in kernel_buffer
-        self.context.make_buffer_current(); // Use ordinary form as inputs of other kernels
+        write_buffer(&mut self.current_layer, 0, &layer.0)?; // Push montgomery form in buffer
+        let ordinary = self.context.create_buffer()?; // Create new temp buffer
+        call_kernel!(
+            self.context,
+            "generate_ordinary",
+            &self.current_layer,
+            &ordinary
+        );
+        self.replace_buffer(ordinary); // Current buffer has now the ordinary form
         Ok(())
     }
 }
@@ -145,8 +129,12 @@ impl NarrowStackedExpander for GPU {
             .first()
             .expect("GPU not found!");
 
+        let mut context = GPUContext::new(device, config)?;
+        let current_layer = context.create_buffer()?;
+
         Ok(GPU {
-            context: GPUContext::new(device, config)?,
+            context,
+            current_layer,
             combine_batch_size: COMBINE_BATCH_SIZE,
             config,
         })
@@ -158,15 +146,22 @@ impl NarrowStackedExpander for GPU {
         window_index: usize,
     ) -> NSEResult<Layer> {
         let mut l = Layer(vec![Node::default(); self.leaf_count()]);
+        let ord_output = self.context.create_buffer()?;
         call_kernel!(
             self.context,
             "generate_mask",
+            &ord_output,
             replica_id,
             window_index as u32
         );
-        call_kernel!(self.context, "generate_montgomery");
-        self.context.pull_current(&mut l.0, 0)?;
-        self.context.make_buffer_current();
+        call_kernel!(
+            self.context,
+            "generate_montgomery",
+            &ord_output,
+            &self.current_layer
+        );
+        read_buffer(&self.current_layer, 0, &mut l.0)?;
+        self.replace_buffer(ord_output);
         Ok(l)
     }
 
@@ -177,16 +172,24 @@ impl NarrowStackedExpander for GPU {
         layer_index: usize,
     ) -> NSEResult<Layer> {
         let mut l = Layer(vec![Node::default(); self.leaf_count()]);
+        let ord_output = self.context.create_buffer()?;
         call_kernel!(
             self.context,
             "generate_expander",
+            &self.current_layer,
+            &ord_output,
             replica_id,
             window_index as u32,
             layer_index as u32
         );
-        call_kernel!(self.context, "generate_montgomery");
-        self.context.pull_current(&mut l.0, 0)?;
-        self.context.make_buffer_current();
+        call_kernel!(
+            self.context,
+            "generate_montgomery",
+            &ord_output,
+            &self.current_layer
+        );
+        read_buffer(&self.current_layer, 0, &mut l.0)?;
+        self.replace_buffer(ord_output);
         Ok(l)
     }
 
@@ -197,17 +200,30 @@ impl NarrowStackedExpander for GPU {
         layer_index: usize,
     ) -> NSEResult<Layer> {
         let mut l = Layer(vec![Node::default(); self.leaf_count()]);
+        let ord_output = self.context.create_buffer()?;
         call_kernel!(
             self.context,
             "generate_butterfly",
+            &self.current_layer,
+            &ord_output,
             replica_id,
             window_index as u32,
             layer_index as u32
         );
-        call_kernel!(self.context, "generate_montgomery");
-        self.context.pull_current(&mut l.0, 0)?;
-        self.context.make_buffer_current();
+        call_kernel!(
+            self.context,
+            "generate_montgomery",
+            &ord_output,
+            &self.current_layer
+        );
+        read_buffer(&self.current_layer, 0, &mut l.0)?;
+        self.replace_buffer(ord_output);
         Ok(l)
+    }
+
+    fn finalize(&mut self) -> NSEResult<()> {
+        call_kernel!(self.context, "to_montgomery", &self.current_layer);
+        Ok(())
     }
 
     fn combine_segment(
@@ -218,15 +234,18 @@ impl NarrowStackedExpander for GPU {
     ) -> NSEResult<Vec<Node>> {
         // Montgomery form of mask is in kernel_buffer!
         let mut l = vec![Node::default(); segment.len()];
-        self.context.push_current(&segment.to_vec(), offset)?;
+        let mut data = self.context.create_buffer()?;
+        write_buffer(&mut data, offset, &segment)?;
         call_kernel!(
             self.context,
             "combine_segment",
+            &self.current_layer,
+            &data,
             offset as u32,
             segment.len() as u32,
             is_decode as u32
         );
-        self.context.pull_current(&mut l, offset)?;
+        read_buffer(&data, offset, &mut l)?;
         Ok(l)
     }
 
@@ -327,6 +346,7 @@ mod tests {
         let data = incrementing_layer(567, TEST_CONFIG.num_nodes_window);
         let mask = incrementing_layer(234, TEST_CONFIG.num_nodes_window);
         gpu.push_layer(&mask).unwrap();
+        gpu.finalize().unwrap();
         let encode = gpu.combine_segment(0, &data.0, false).unwrap();
         let decode = gpu.combine_segment(0, &data.0, true).unwrap();
         assert_eq!(Fr::from_str("1867776").unwrap(), accumulate(&encode).0);
