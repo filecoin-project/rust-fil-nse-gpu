@@ -70,7 +70,7 @@ impl Sha256Domain {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Default)]
 pub struct Layer(pub Vec<Node>);
 
 #[derive(PartialEq, Debug, Clone)]
@@ -174,6 +174,35 @@ impl<'a> Sealer<'a> {
             },
         })
     }
+
+    pub fn seek(&mut self, target_layer_index: usize, target_layer_data: &Layer) -> NSEResult<()> {
+        self.key_generator
+            .seek(target_layer_index, target_layer_data)
+    }
+
+    pub fn new_from_layer(
+        provided_layer_index: usize,
+        provided_layer: &Layer,
+        config: Config,
+        replica_id: Sha256Domain,
+        window_index: usize,
+        original_data: Layer,
+        gpu: &'a mut GPU,
+        build_trees: bool,
+        rows_to_discard: usize,
+    ) -> NSEResult<Self> {
+        let mut sealer = Self::new(
+            config,
+            replica_id,
+            window_index,
+            original_data,
+            gpu,
+            build_trees,
+            rows_to_discard,
+        )?;
+        sealer.seek(provided_layer_index, provided_layer)?;
+        Ok(sealer)
+    }
 }
 
 impl<'a> Iterator for Sealer<'a> {
@@ -212,8 +241,8 @@ impl<'a> ExactSizeIterator for Sealer<'a> {
     }
 }
 
-#[allow(dead_code)]
 pub struct Unsealer<'a> {
+    #[allow(dead_code)]
     key_generator: KeyGenerator<'a>,
 }
 
@@ -266,6 +295,10 @@ impl<'a> KeyGenerator<'a> {
             current_layer_index: 0, // Initial value of 0 means the current layer precedes any generated layer.
             gpu,
         })
+    }
+    pub fn seek(&mut self, target_layer_index: usize, target_layer_data: &Layer) -> NSEResult<()> {
+        self.current_layer_index = target_layer_index + 1;
+        self.gpu.push_layer(&target_layer_data)
     }
 
     fn config(&self) -> Config {
@@ -405,13 +438,17 @@ mod tests {
         )
         .unwrap();
 
-        let roots = sealer
-            .map(|r| {
-                let l = r.unwrap();
+        let layer_index_to_restart = 3;
+        let layers = sealer.map(|x| x).collect::<NSEResult<Vec<_>>>().unwrap();
+        let roots = layers
+            .iter()
+            .map(|l| {
                 assert_eq!(1, l.tree.len());
                 l.tree[l.tree.len() - 1]
             })
             .collect::<Vec<_>>();
+
+        let layer_to_restart = &layers[layer_index_to_restart].base;
 
         assert_eq!(
             roots[..7].to_vec(),
@@ -481,6 +518,47 @@ mod tests {
                 )
             ]
         );
+
+        let mut restarted_sealer = Sealer::new_from_layer(
+            layer_index_to_restart,
+            layer_to_restart,
+            TEST_CONFIG,
+            TEST_REPLICA_ID,
+            TEST_WINDOW_INDEX,
+            original_data.clone(),
+            &mut gpu,
+            true,
+            2,
+        )
+        .unwrap();
+
+        let mut restarted_roots = Vec::new();
+
+        for r in &mut restarted_sealer {
+            let l = r.unwrap();
+            assert_eq!(1, l.tree.len());
+            restarted_roots.push(l.tree[l.tree.len() - 1]);
+        }
+
+        assert_eq!(
+            &roots[layer_index_to_restart + 1..],
+            restarted_roots.as_slice()
+        );
+
+        let seek_target = 2;
+        restarted_sealer
+            .seek(seek_target, &layers[seek_target].base)
+            .unwrap();
+
+        let sought_roots = restarted_sealer
+            .map(|r| {
+                let l = r.unwrap();
+                assert_eq!(1, l.tree.len());
+                l.tree[l.tree.len() - 1]
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(&roots[seek_target + 1..], sought_roots.as_slice());
     }
 
     #[test]
