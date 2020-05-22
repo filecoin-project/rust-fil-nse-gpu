@@ -546,7 +546,9 @@ mod tests {
         );
 
         let seek_target = 2;
-        restarted_sealer.seek(seek_target, &layers[seek_target].base);
+        restarted_sealer
+            .seek(seek_target, &layers[seek_target].base)
+            .unwrap();
 
         let sought_roots = restarted_sealer
             .map(|r| {
