@@ -184,7 +184,7 @@ impl<'a> Sealer<'a> {
         provided_layer_index: usize,
         provided_layer: &Layer,
         config: Config,
-        replica_id: Sha256Domain,
+        replica_id: ReplicaId,
         window_index: usize,
         original_data: Layer,
         gpu: &'a mut GPU,
