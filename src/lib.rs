@@ -451,7 +451,7 @@ mod tests {
         let layer_to_restart = &layers[layer_index_to_restart].base;
 
         assert_eq!(
-            roots[..6].to_vec(),
+            roots[..7].to_vec(),
             vec![
                 Node(
                     Fr::from_repr(FrRepr([
