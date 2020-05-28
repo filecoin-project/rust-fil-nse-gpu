@@ -2,7 +2,7 @@ mod error;
 mod gpu;
 mod sources;
 
-use error::*;
+pub use error::*;
 use ff::Field;
 use generic_array::typenum::U8;
 pub use gpu::*;
