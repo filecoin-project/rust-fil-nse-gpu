@@ -3,12 +3,12 @@ mod gpu;
 mod sources;
 
 pub use error::*;
-use ff::Field;
+use ff::{Field, PrimeField};
 use generic_array::typenum::U8;
 pub use gpu::*;
 use neptune::batch_hasher::BatcherType;
 use neptune::tree_builder::{TreeBuilder, TreeBuilderTrait};
-use paired::bls12_381::Fr;
+use paired::bls12_381::{Fr, FrRepr};
 use rand::{Rng, RngCore};
 
 // TODO: Move these constants into configuration of GPU, Sealer, KeyGenerator, etc.
@@ -18,6 +18,8 @@ const COMBINE_BATCH_SIZE: usize = 500000;
 #[repr(transparent)]
 /// Nodes are always assumed to be in Montgomery Form.
 pub struct Node(pub Fr);
+
+pub const NODE_SIZE: usize = std::mem::size_of::<Node>();
 
 impl Node {
     pub fn random<R: RngCore>(rng: &mut R) -> Self {
@@ -72,6 +74,39 @@ impl ReplicaId {
 
 #[derive(PartialEq, Debug, Clone, Default)]
 pub struct Layer(pub Vec<Node>);
+
+impl From<&Vec<u8>> for Layer {
+    fn from(data: &Vec<u8>) -> Self {
+        assert_eq!(std::mem::size_of::<FrRepr>(), NODE_SIZE);
+        let mut nodes = Vec::with_capacity(data.len() / NODE_SIZE);
+        let mut temp = [0u8; NODE_SIZE];
+        for slice in data.chunks_exact(NODE_SIZE) {
+            temp.copy_from_slice(&slice[..]);
+            nodes.push(Node(
+                Fr::from_repr(unsafe { std::mem::transmute::<[u8; NODE_SIZE], FrRepr>(temp) })
+                    .unwrap(),
+            ));
+        }
+        Layer(nodes)
+    }
+}
+
+impl From<&Layer> for Vec<u8> {
+    fn from(layer: &Layer) -> Self {
+        assert_eq!(std::mem::size_of::<FrRepr>(), NODE_SIZE);
+        let mut ret = Vec::with_capacity(layer.0.len() * NODE_SIZE);
+        for n in layer.0.iter() {
+            ret.extend(unsafe {
+                std::slice::from_raw_parts(
+                    &n.0.into_repr() as *const FrRepr as *const u8,
+                    std::mem::size_of::<FrRepr>(),
+                )
+                .to_vec()
+            });
+        }
+        ret
+    }
+}
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct LayerOutput {

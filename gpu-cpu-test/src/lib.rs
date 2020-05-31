@@ -48,33 +48,6 @@ mod tests {
         Node(acc)
     }
 
-    fn u8_limbs_of<T>(value: T) -> Vec<u8> {
-        unsafe {
-            std::slice::from_raw_parts(&value as *const T as *const u8, std::mem::size_of::<T>())
-                .to_vec()
-        }
-    }
-
-    fn layer_to_vec_u8(l: &Layer) -> Vec<u8> {
-        let mut ret = Vec::new();
-        for n in l.0.iter() {
-            ret.extend(u8_limbs_of(n.0.into_repr()));
-        }
-        ret
-    }
-
-    fn vec_u8_to_layer(v: &Vec<u8>) -> Layer {
-        let mut nodes = Vec::new();
-        for slice in v.chunks_exact(32) {
-            let mut slc = [0u8; 32];
-            slc.copy_from_slice(&slice[..]);
-            nodes.push(Node(
-                Fr::from_repr(unsafe { std::mem::transmute::<[u8; 32], FrRepr>(slc) }).unwrap(),
-            ));
-        }
-        Layer(nodes)
-    }
-
     #[test]
     fn test_expander_compatibility() {
         let mut rng = thread_rng();
@@ -91,7 +64,7 @@ mod tests {
                 .generate_expander_layer(replica_id, window_index, layer_index)
                 .unwrap();
 
-            let layer_a = layer_to_vec_u8(&prev_layer);
+            let layer_a = Vec::<u8>::from(&prev_layer);
             let mut layer_b = layer_a.clone();
             nse::expander_layer(
                 &to_cpu_config(TEST_CONFIG),
@@ -102,7 +75,7 @@ mod tests {
                 &mut layer_b,
             )
             .unwrap();
-            let cpu_output = vec_u8_to_layer(&layer_b);
+            let cpu_output = Layer::from(&layer_b);
 
             assert_eq!(accumulate(&cpu_output.0), accumulate(&gpu_output.0));
         }
@@ -124,7 +97,7 @@ mod tests {
                 .generate_butterfly_layer(replica_id, window_index, layer_index)
                 .unwrap();
 
-            let layer_a = layer_to_vec_u8(&prev_layer);
+            let layer_a = Vec::<u8>::from(&prev_layer);
             let mut layer_b = layer_a.clone();
             nse::butterfly_layer(
                 &to_cpu_config(TEST_CONFIG),
@@ -135,7 +108,7 @@ mod tests {
                 &mut layer_b,
             )
             .unwrap();
-            let cpu_output = vec_u8_to_layer(&layer_b);
+            let cpu_output = Layer::from(&layer_b);
 
             assert_eq!(accumulate(&cpu_output.0), accumulate(&gpu_output.0));
         }
@@ -180,7 +153,7 @@ mod tests {
             );
             let store_configs =
                 split_config(store_config.clone(), cpu_config.num_layers()).unwrap();
-            let mut cpu_output = layer_to_vec_u8(&data);
+            let mut cpu_output = Vec::<u8>::from(&data);
             let (cpu_trees, _) =
                 nse::encode_with_trees::<OctLCMerkleTree<poseidon::PoseidonHasher>>(
                     &cpu_config,
@@ -190,7 +163,7 @@ mod tests {
                     &mut cpu_output,
                 )
                 .unwrap();
-            let cpu_output = vec_u8_to_layer(&cpu_output);
+            let cpu_output = Layer::from(&cpu_output);
             let cpu_roots = cpu_trees.iter().map(|t| t.root());
 
             assert_eq!(gpu_output, cpu_output);
