@@ -136,10 +136,13 @@ mod tests {
 
             let gpu_layers = sealer.map(|r| r.unwrap()).collect::<Vec<_>>();
             let gpu_output = gpu_layers.iter().last().unwrap().base.clone();
-            let gpu_roots = gpu_layers.iter().map(|l| {
-                assert_eq!(l.tree.len(), 1);
-                node_to_poseidon_domain(l.tree[0])
-            });
+            let gpu_roots = gpu_layers
+                .iter()
+                .map(|l| {
+                    assert_eq!(l.tree.len(), 1);
+                    node_to_poseidon_domain(l.tree[0])
+                })
+                .collect::<Vec<_>>();
 
             let cpu_config = to_cpu_config(TEST_CONFIG);
             let cache_dir = tempfile::tempdir().unwrap();
@@ -154,7 +157,7 @@ mod tests {
             let store_configs =
                 split_config(store_config.clone(), cpu_config.num_layers()).unwrap();
             let mut cpu_output = Vec::<u8>::from(&data);
-            let (cpu_trees, _) =
+            let (cpu_trees, cpu_replica_tree) =
                 nse::encode_with_trees::<OctLCMerkleTree<poseidon::PoseidonHasher>>(
                     &cpu_config,
                     store_configs,
@@ -164,12 +167,14 @@ mod tests {
                 )
                 .unwrap();
             let cpu_output = Layer::from(&cpu_output);
-            let cpu_roots = cpu_trees.iter().map(|t| t.root());
+            let cpu_roots = {
+                let mut roots = cpu_trees.iter().map(|t| t.root()).collect::<Vec<_>>();
+                roots.push(cpu_replica_tree.root());
+                roots
+            };
 
             assert_eq!(gpu_output, cpu_output);
-            for (gpu_root, cpu_root) in gpu_roots.zip(cpu_roots) {
-                assert_eq!(gpu_root, cpu_root);
-            }
+            assert_eq!(cpu_roots, gpu_roots);
         }
     }
 }
