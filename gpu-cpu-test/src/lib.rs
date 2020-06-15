@@ -149,10 +149,7 @@ mod tests {
             let store_config = StoreConfig::new(
                 cache_dir.path(),
                 CacheKey::CommDTree.to_string(),
-                StoreConfig::default_cached_above_base_layer(
-                    cpu_config.num_nodes_window as usize,
-                    8,
-                ),
+                StoreConfig::default_rows_to_discard(cpu_config.num_nodes_window as usize, 8),
             );
             let store_configs =
                 split_config(store_config.clone(), cpu_config.num_layers()).unwrap();
