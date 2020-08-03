@@ -1,3 +1,6 @@
+// Based on poclbm's historical public-domain implementation:
+// https://github.com/m0mchil/poclbm/commit/343abc9ff37e9583d2366465a5c26f44939e54cf
+
 typedef struct {
   uint vals[8];
 } sha256_domain;
