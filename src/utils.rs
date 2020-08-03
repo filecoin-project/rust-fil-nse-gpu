@@ -19,7 +19,7 @@ pub fn get_devices(platform_name: &str) -> GPUResult<Vec<Device>> {
     });
     match platform {
         Some(p) => Ok(Device::list_all(p)?),
-        None => Err(GPUError::Simple("GPU platform not found!")),
+        None => Err(GPUError::Other("GPU platform not found!".into())),
     }
 }
 

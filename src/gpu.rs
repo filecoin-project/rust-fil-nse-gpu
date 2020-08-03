@@ -1,6 +1,6 @@
 use super::{
-    sources, utils, Config, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node, ReplicaId,
-    COMBINE_BATCH_SIZE,
+    sources, utils, Config, GPUError, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node,
+    ReplicaId, COMBINE_BATCH_SIZE,
 };
 use generic_array::typenum::U8;
 use log::info;
@@ -9,6 +9,13 @@ use neptune::cl::GPUSelector;
 use neptune::tree_builder::TreeBuilder;
 use ocl::builders::KernelBuilder;
 use ocl::{Buffer, Device, OclPrm, ProQue};
+
+pub fn is_little_endian(d: ocl::Device) -> GPUResult<bool> {
+    match d.info(ocl::enums::DeviceInfo::EndianLittle)? {
+        ocl::enums::DeviceInfoResult::EndianLittle(b) => Ok(b),
+        _ => Err(GPUError::Other("Cannot detect device endianness!".into())),
+    }
+}
 
 fn write_buffer<T: OclPrm>(buff: &mut Buffer<T>, offset: usize, segment: &[T]) -> GPUResult<()> {
     info!("Pushing data...");
@@ -53,6 +60,10 @@ impl GPUContext {
             "Initializing a new NSE GPU context on device: {}",
             device.name()?
         );
+
+        if !is_little_endian(device)? {
+            Err(GPUError::Other("Device should be little-endian!".into()))?;
+        }
 
         info!("Compiling kernels...");
         let code = sources::generate_nse_program(config);
@@ -314,7 +325,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             Fr::from_str(
-                "6446969232366391856858003439695628724183208016254828395100207087840708265392"
+                "14782940608458749152052068546707738955373949446874699092685797723589199108169"
             )
             .unwrap(),
             accumulate(&l.0).0
@@ -332,7 +343,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             Fr::from_str(
-                "31927618342922418711037965387576862711609979706171976983782310220611346538648"
+                "22705938218269600582111888137759768785425241059162326580787572603300938432305"
             )
             .unwrap(),
             accumulate(&l.0).0
@@ -350,7 +361,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             Fr::from_str(
-                "28446803097318130282256338067690839150703163945352000894825958507969324842746"
+                "957721749774935859819530955474230185920900559990452793231841687285976045738"
             )
             .unwrap(),
             accumulate(&l.0).0

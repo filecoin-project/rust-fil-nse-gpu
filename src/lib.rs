@@ -475,64 +475,64 @@ mod tests {
             vec![
                 Node(
                     Fr::from_repr(FrRepr([
-                        0xa5e27adc572ceb48,
-                        0xdf4a5bf461291644,
-                        0xd82202fd92c1ad36,
-                        0x6618ec3e3f6e850e
+                        0xba0280418b23a3c4,
+                        0x3d49ba6a2e216f46,
+                        0x65c38ddf4cde76f3,
+                        0x318dfbdd1cb3c701
                     ]))
                     .unwrap()
                 ),
                 Node(
                     Fr::from_repr(FrRepr([
-                        0x19768fa13e8e82ac,
-                        0xd12de7a1a2838c16,
-                        0xf079012b686ec6f8,
-                        0x4a0095adf1af7804
+                        0xaf6ffcb87a51a03f,
+                        0x4d8bff6bcf6f1961,
+                        0xb0d8e687e2d4c464,
+                        0x51d4ffb9de3a8a18
                     ]))
                     .unwrap()
                 ),
                 Node(
                     Fr::from_repr(FrRepr([
-                        0x1318f4ddd65c804c,
-                        0xce800919d3384c2f,
-                        0x8f755c17e777c6b4,
-                        0x39668d7e2007c4d8
+                        0xfa3ff052b0ef4205,
+                        0x285abfefd2861b21,
+                        0xf884bc316ee69685,
+                        0x4f39580cc5bafd0e
                     ]))
                     .unwrap()
                 ),
                 Node(
                     Fr::from_repr(FrRepr([
-                        0x7a8e015ab5adee0a,
-                        0xfe89428e964fcbda,
-                        0x57dff3c979d6a5ed,
-                        0x5d5472f5196ebb69
+                        0xdb9d5e5df6796064,
+                        0x1aba373bd41020a2,
+                        0x114f262788304089,
+                        0x0bf168dec07a3ac4
                     ]))
                     .unwrap()
                 ),
                 Node(
                     Fr::from_repr(FrRepr([
-                        0x1f54cbe16317b680,
-                        0x0b23c6f38c74a331,
-                        0xee8eee2ad7b9b428,
-                        0x09c602475f8cd8b4
+                        0xd0382f0647cc5bc3,
+                        0x9a719d1d53da5f80,
+                        0x00aa9e6aa538779d,
+                        0x5187e91d102035af
                     ]))
                     .unwrap()
                 ),
                 Node(
                     Fr::from_repr(FrRepr([
-                        0xb8f76f7c19eefd5f,
-                        0x85c96fa11ef1836a,
-                        0x570dc8ad464fb5a4,
-                        0x48d0c7abbdc2f434
+                        0x646451246f10344b,
+                        0x8d6e697c269041c0,
+                        0xc5f1b27e2bdfdcbf,
+                        0x50c97f19b8f0e3e2
                     ]))
                     .unwrap()
                 ),
                 Node(
                     Fr::from_repr(FrRepr([
-                        0x96ae85445f800524,
-                        0x5ad4c48624ab3422,
-                        0x4f3ce2b370221f37,
-                        0x53cfa99bd440d3b9
+                        0x8d66677d0d708e31,
+                        0x4c34772776327789,
+                        0xf86d396bc0bd4cf2,
+                        0x64238b97c181baaf
                     ]))
                     .unwrap()
                 )

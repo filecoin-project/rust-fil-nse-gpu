@@ -55,11 +55,12 @@ __kernel void generate_expander(__global Fr *input,
                                 uint layer_index) {
 
   uint node = get_global_id(0); // Nodes are processed in parallel
+  ulong node_absolute_index = (ulong)window_index * N + node;
 
   bit_stream stream = gen_stream(node); // 1152 Bytes ~ 1KB
 
   sha256_domain state = sha256_INIT;
-  state = sha256_update(state, hash_prefix(layer_index, node, window_index, id));
+  state = sha256_update(state, hash_prefix(layer_index, node_absolute_index, id));
 
   for(uint i = 0; i < DEGREE_EXPANDER / 2; i++) {
     uint i_1 = i * 2;

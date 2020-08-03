@@ -28,11 +28,15 @@ uint reverse_bytes(uint a) {
          (a & 0x00ff0000) >> 8 | (a & 0xff000000) >> 24;
 }
 
-sha256_block hash_prefix(uint layer_index, uint node_index, uint window_index, replica_id id) {
+sha256_block hash_prefix(uint layer_index, ulong node_absolute_index, replica_id id) {
   sha256_block data = sha256_ZERO;
   data.vals[0] = layer_index;
-  data.vals[1] = node_index;
-  data.vals[2] = window_index;
+  // `node_absolute_index` is encoded in big-endian order (Based on the cpu impl),
+  // which means (Based on the assumption that Nvidia/AMD devices are little-endian)
+  // we should assume the supplied ulong `node_absolute_index`'s lower part is
+  // `(node_absolute_index >> 32)` and higher part is `node_absolute_index & 0xffffffff`
+  data.vals[1] = node_absolute_index >> 32;
+  data.vals[2] = node_absolute_index;
   for(uint i = 0; i < 8; i++) {
     data.vals[8 + i] = reverse_bytes(id.vals[i]);
   }

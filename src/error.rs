@@ -2,8 +2,8 @@
 pub enum GPUError {
     #[error("Ocl Error: {0}")]
     Ocl(ocl::Error),
-    #[error("GPUError: {0}")]
-    Simple(&'static str),
+    #[error("Error: {0}")]
+    Other(String),
 }
 
 #[allow(dead_code)]
