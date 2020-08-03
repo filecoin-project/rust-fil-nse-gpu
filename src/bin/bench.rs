@@ -57,24 +57,33 @@ fn bench_combine(gpu: &mut GPU, samples: usize) -> u64 {
     timer!(gpu.combine_layer(&data, false).unwrap(), samples)
 }
 
-fn bench_sealer(gpu: &mut GPU, samples: usize, build_trees: bool) -> u64 {
+fn bench_sealer(
+    config: Config,
+    samples: usize,
+    tree_options: TreeOptions,
+    num_windows: usize,
+) -> u64 {
     let mut rng = thread_rng();
-    let replica_id = ReplicaId::random(&mut rng);
-    let window_index: usize = rng.gen();
-    let data = Layer::random(&mut rng, gpu.leaf_count());
+
+    let inputs: Vec<SealerInput> = (0..num_windows)
+        .map(|_| SealerInput {
+            replica_id: ReplicaId::random(&mut rng),
+            window_index: rng.gen(),
+            original_data: Layer::random(&mut rng, config.num_nodes_window),
+        })
+        .collect();
+    let mut pool = SealerPool::new(utils::all_devices().unwrap(), config, tree_options).unwrap();
+
     timer!(
         {
-            let sealer = Sealer::new(
-                gpu.config,
-                replica_id,
-                window_index,
-                data.clone(),
-                gpu,
-                build_trees,
-                2,
-            )
-            .unwrap();
-            for _ in sealer {}
+            let pool_output_channels = inputs
+                .iter()
+                .map(|inp| pool.seal_on_gpu(inp.clone()))
+                .collect::<Vec<_>>();
+            pool_output_channels
+                .into_iter()
+                .map(|c| c.iter().collect::<NSEResult<Vec<_>>>().unwrap())
+                .collect::<Vec<_>>()
         },
         samples
     )
@@ -97,6 +106,10 @@ struct Opts {
     num_butterfly_layers: usize,
     #[structopt(long = "samples", default_value = "10")]
     samples: usize,
+    #[structopt(long = "sealer")]
+    sealer: bool,
+    #[structopt(long = "num-windows", default_value = "1")]
+    num_windows: usize,
     #[structopt(long = "trees")]
     build_trees: bool,
 }
@@ -121,14 +134,24 @@ fn main() {
     println!("Options: {:?}", opts);
 
     let config: Config = Config::from(opts);
-    let mut gpu = GPU::new(config).unwrap();
+    let tree_options = if opts.build_trees {
+        TreeOptions::Enabled { rows_to_discard: 2 }
+    } else {
+        TreeOptions::Disabled
+    };
 
-    println!("Mask: {}ms", bench_mask(&mut gpu, opts.samples));
-    println!("Expander: {}ms", bench_expander(&mut gpu, opts.samples));
-    println!("Butterfly: {}ms", bench_butterfly(&mut gpu, opts.samples));
-    println!("Combine: {}ms", bench_combine(&mut gpu, opts.samples));
-    println!(
-        "Sealer: {}ms",
-        bench_sealer(&mut gpu, opts.samples, opts.build_trees)
-    );
+    if opts.sealer {
+        println!(
+            "Sealer: {}ms",
+            bench_sealer(config, opts.samples, tree_options, opts.num_windows)
+        );
+    } else {
+        let ctx = GPUContext::default(config, tree_options).unwrap();
+        let mut gpu = GPU::new(ctx, config).unwrap();
+
+        println!("Mask: {}ms", bench_mask(&mut gpu, opts.samples));
+        println!("Expander: {}ms", bench_expander(&mut gpu, opts.samples));
+        println!("Butterfly: {}ms", bench_butterfly(&mut gpu, opts.samples));
+        println!("Combine: {}ms", bench_combine(&mut gpu, opts.samples));
+    }
 }

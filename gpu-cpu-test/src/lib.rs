@@ -51,7 +51,8 @@ mod tests {
     #[test]
     fn test_expander_compatibility() {
         let mut rng = thread_rng();
-        let mut gpu = GPU::new(TEST_CONFIG).unwrap();
+        let ctx = GPUContext::default(TEST_CONFIG, TreeOptions::Disabled).unwrap();
+        let mut gpu = GPU::new(ctx, TEST_CONFIG).unwrap();
 
         for _ in 0..10 {
             let prev_layer = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
@@ -84,7 +85,8 @@ mod tests {
     #[test]
     fn test_butterfly_compatibility() {
         let mut rng = thread_rng();
-        let mut gpu = GPU::new(TEST_CONFIG).unwrap();
+        let ctx = GPUContext::default(TEST_CONFIG, TreeOptions::Disabled).unwrap();
+        let mut gpu = GPU::new(ctx, TEST_CONFIG).unwrap();
 
         for _ in 0..10 {
             let prev_layer = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
@@ -117,7 +119,9 @@ mod tests {
     #[test]
     fn test_sealer_compatibility() {
         let mut rng = thread_rng();
-        let mut gpu = GPU::new(TEST_CONFIG).unwrap();
+        let ctx =
+            GPUContext::default(TEST_CONFIG, TreeOptions::Enabled { rows_to_discard: 2 }).unwrap();
+        let mut gpu = GPU::new(ctx, TEST_CONFIG).unwrap();
 
         for _ in 0..10 {
             let data = Layer::random(&mut rng, TEST_CONFIG.num_nodes_window);
@@ -125,12 +129,13 @@ mod tests {
             let window_index: usize = rng.gen();
             let sealer = Sealer::new(
                 TEST_CONFIG,
-                replica_id,
-                window_index,
-                data.clone(),
+                SealerInput {
+                    replica_id,
+                    window_index,
+                    original_data: data.clone(),
+                },
                 &mut gpu,
                 true,
-                2,
             )
             .unwrap();
 

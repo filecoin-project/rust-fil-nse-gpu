@@ -1,14 +1,15 @@
 mod error;
 mod gpu;
+mod pool;
 mod sources;
+pub mod utils;
 
 pub use error::*;
 use ff::{Field, PrimeField};
-use generic_array::typenum::U8;
 pub use gpu::*;
-use neptune::batch_hasher::BatcherType;
-use neptune::tree_builder::{TreeBuilder, TreeBuilderTrait};
+use neptune::tree_builder::TreeBuilderTrait;
 use paired::bls12_381::{Fr, FrRepr};
+pub use pool::*;
 use rand::{Rng, RngCore};
 
 // TODO: Move these constants into configuration of GPU, Sealer, KeyGenerator, etc.
@@ -109,6 +110,13 @@ impl From<&Layer> for Vec<u8> {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub struct SealerInput {
+    pub replica_id: ReplicaId,
+    pub window_index: usize,
+    pub original_data: Layer,
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub struct LayerOutput {
     pub base: Layer,
     pub tree: Vec<Node>,
@@ -121,7 +129,7 @@ impl Layer {
 }
 
 pub trait NarrowStackedExpander: Sized {
-    fn new(config: Config) -> NSEResult<Self>;
+    fn new(context: GPUContext, config: Config) -> NSEResult<Self>;
     fn generate_mask_layer(
         &mut self,
         replica_id: ReplicaId,
@@ -177,36 +185,20 @@ pub struct Config {
 pub struct Sealer<'a> {
     original_data: Layer,
     key_generator: KeyGenerator<'a>,
-    tree_builder: Option<TreeBuilder<'a, U8>>,
+    build_trees: bool,
 }
-
-const TREE_BUILDER_BATCH_SIZE: usize = 400_000;
 
 impl<'a> Sealer<'a> {
     pub fn new(
         config: Config,
-        replica_id: ReplicaId,
-        window_index: usize,
-        original_data: Layer,
+        input: SealerInput,
         gpu: &'a mut GPU,
         build_trees: bool,
-        rows_to_discard: usize,
     ) -> NSEResult<Self> {
-        let leaf_count = gpu.leaf_count();
         Ok(Self {
-            original_data,
-            key_generator: KeyGenerator::new(config, replica_id, window_index, gpu)?,
-            // TODO: ensure tree_builder and key_generator use the same device (unless otherwise specified).
-            tree_builder: if build_trees {
-                Some(TreeBuilder::<U8>::new(
-                    Some(BatcherType::GPU),
-                    leaf_count,
-                    TREE_BUILDER_BATCH_SIZE,
-                    rows_to_discard,
-                )?)
-            } else {
-                None
-            },
+            original_data: input.original_data,
+            key_generator: KeyGenerator::new(config, input.replica_id, input.window_index, gpu)?,
+            build_trees,
         })
     }
 
@@ -219,22 +211,11 @@ impl<'a> Sealer<'a> {
         provided_layer_index: usize,
         provided_layer: &Layer,
         config: Config,
-        replica_id: ReplicaId,
-        window_index: usize,
-        original_data: Layer,
+        input: SealerInput,
         gpu: &'a mut GPU,
         build_trees: bool,
-        rows_to_discard: usize,
     ) -> NSEResult<Self> {
-        let mut sealer = Self::new(
-            config,
-            replica_id,
-            window_index,
-            original_data,
-            gpu,
-            build_trees,
-            rows_to_discard,
-        )?;
+        let mut sealer = Self::new(config, input, gpu, build_trees)?;
         sealer.seek(provided_layer_index, provided_layer)?;
         Ok(sealer)
     }
@@ -252,7 +233,8 @@ impl<'a> Iterator for Sealer<'a> {
                 } else {
                     next_key_layer
                 }?;
-                if let Some(tree_builder) = &mut self.tree_builder {
+                if self.build_trees {
+                    let tree_builder = self.key_generator.gpu.tree_builder().as_mut().unwrap(); // WARN: unwrap()
                     let frs = Node::as_frs(layer.0.as_slice());
                     let (_, fr_tree) = tree_builder.add_final_leaves(frs)?;
                     let tree = Node::from_frs(&fr_tree).to_vec();
@@ -460,16 +442,19 @@ mod tests {
 
     #[test]
     fn test_sealer() {
-        let mut gpu = GPU::new(TEST_CONFIG).unwrap();
+        let ctx =
+            GPUContext::default(TEST_CONFIG, TreeOptions::Enabled { rows_to_discard: 2 }).unwrap();
+        let mut gpu = GPU::new(ctx, TEST_CONFIG).unwrap();
         let original_data = incrementing_layer(123, TEST_CONFIG.num_nodes_window);
         let sealer = Sealer::new(
             TEST_CONFIG,
-            TEST_REPLICA_ID,
-            TEST_WINDOW_INDEX,
-            original_data.clone(),
+            SealerInput {
+                replica_id: TEST_REPLICA_ID,
+                window_index: TEST_WINDOW_INDEX,
+                original_data: original_data.clone(),
+            },
             &mut gpu,
             true,
-            2,
         )
         .unwrap();
 
@@ -558,12 +543,13 @@ mod tests {
             layer_index_to_restart,
             layer_to_restart,
             TEST_CONFIG,
-            TEST_REPLICA_ID,
-            TEST_WINDOW_INDEX,
-            original_data.clone(),
+            SealerInput {
+                replica_id: TEST_REPLICA_ID,
+                window_index: TEST_WINDOW_INDEX,
+                original_data: original_data.clone(),
+            },
             &mut gpu,
             true,
-            2,
         )
         .unwrap();
 
@@ -605,16 +591,18 @@ mod tests {
         let replica_id = ReplicaId::random(&mut rng);
         let window_index: usize = rng.gen();
 
-        let mut gpu = GPU::new(TEST_CONFIG).unwrap();
+        let ctx = GPUContext::default(TEST_CONFIG, TreeOptions::Disabled).unwrap();
+        let mut gpu = GPU::new(ctx, TEST_CONFIG).unwrap();
 
         let sealer = Sealer::new(
             TEST_CONFIG,
-            replica_id,
-            window_index,
-            original_data.clone(),
+            SealerInput {
+                replica_id,
+                window_index,
+                original_data: original_data.clone(),
+            },
             &mut gpu,
             false,
-            2,
         )
         .unwrap();
 

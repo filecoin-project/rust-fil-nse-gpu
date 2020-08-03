@@ -17,7 +17,7 @@ itertools = "0.8.0"
 thiserror = "1.0.10"
 rand = "0.7"
 structopt = { version = "0.3", default-features = false }
-neptune = { version = "1.0.1", features = ["gpu"] }
+neptune = { version = "1.2.0", features = ["gpu"] }
 generic-array = "0.13.2"
 log = "0.4.8"
 env_logger = "0.7.1"
