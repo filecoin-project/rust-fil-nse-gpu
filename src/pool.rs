@@ -5,6 +5,7 @@ use ocl::Device;
 use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
+use std::time::Duration;
 
 struct SealerWorker {
     died: bool,
@@ -97,6 +98,8 @@ impl SealerPool {
     /// Gets a SealerInput and returns a receiving output channel as soon as a free GPU is found.
     /// Blocks if all GPUs are busy.
     pub fn seal_on_gpu(&mut self, inp: SealerInput) -> mpsc::Receiver<NSEResult<LayerOutput>> {
+        const TIMEOUT: Duration = Duration::from_millis(5000);
+
         // Lock until a free GPU is found
         let mut lock = self.lock.lock().unwrap();
 
@@ -131,7 +134,7 @@ impl SealerPool {
 
             // No free GPUs found, wait for a GPU to notify us
             info!("Waiting for a free GPU...");
-            lock = self.cond.wait(lock).unwrap();
+            lock = self.cond.wait_timeout(lock, TIMEOUT).unwrap().0;
         }
     }
 }
