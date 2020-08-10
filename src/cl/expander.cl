@@ -1,5 +1,4 @@
 #define BYTE_SIZE (BIT_SIZE / 8)
-#define STREAM_HASH_COUNT (DEGREE_EXPANDER * BIT_SIZE / sha256_BITS)
 
 // We are going to generate and store the entire bit-stream per node
 // before running the expander algorithm. Is this a good idea?

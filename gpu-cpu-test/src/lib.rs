@@ -14,7 +14,7 @@ mod tests {
     pub const TEST_CONFIG: Config = Config {
         k: 2,
         num_nodes_window: 512, // Must be 2^(3*x) for 8-ary merkle trees
-        degree_expander: 96,
+        degree_expander: 56,
         degree_butterfly: 4,
         num_expander_layers: 4,
         num_butterfly_layers: 3,
