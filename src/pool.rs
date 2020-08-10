@@ -76,6 +76,7 @@ impl SealerPool {
                                 }
                             }
                             *busy = false;
+                            drop(busy);
                             cond.notify_all(); // Notify that one GPU is not busy anymore
                             info!("Device[{}]: Sealing finished, waiting for inputs...", i);
                         }
