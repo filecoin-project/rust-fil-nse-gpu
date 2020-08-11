@@ -1,6 +1,6 @@
 [package]
 name = "rust-fil-nse-gpu"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Keyvan Kambakhsh <keyvankambakhsh@gmail.com>", "porcuquine <porcuquine@gmail.com>"]
 description = "Rust interface to GPU implementation of Filecoin's Narrow Stacked Expander (NSE) sealing algorithm"
 edition = "2018"
