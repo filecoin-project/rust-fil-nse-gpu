@@ -1,41 +1,17 @@
 use super::{
-    sources, utils, Config, GPUError, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node,
-    ReplicaId, COMBINE_BATCH_SIZE,
+    sources, Config, GPUError, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node, ReplicaId,
+    COMBINE_BATCH_SIZE,
 };
 use generic_array::typenum::U8;
 use log::info;
 use neptune::batch_hasher::BatcherType;
 use neptune::cl::GPUSelector;
 use neptune::tree_builder::TreeBuilder;
-use ocl::builders::KernelBuilder;
-use ocl::{Buffer, Device, OclPrm, ProQue};
+use rust_gpu_tools::opencl as cl;
+use rust_gpu_tools::*;
 
-pub fn is_little_endian(d: ocl::Device) -> GPUResult<bool> {
-    match d.info(ocl::enums::DeviceInfo::EndianLittle)? {
-        ocl::enums::DeviceInfoResult::EndianLittle(b) => Ok(b),
-        _ => Err(GPUError::Other("Cannot detect device endianness!".into())),
-    }
-}
-
-fn write_buffer<T: OclPrm>(buff: &mut Buffer<T>, offset: usize, segment: &[T]) -> GPUResult<()> {
-    info!("Pushing data...");
-    buff.create_sub_buffer(None, offset, segment.len())?
-        .write(segment)
-        .enq()?;
-    Ok(())
-}
-
-fn read_buffer<T: OclPrm>(buff: &Buffer<T>, offset: usize, segment: &mut [T]) -> GPUResult<()> {
-    info!("Pulling results...");
-    buff.create_sub_buffer(None, offset, segment.len())?
-        .read(segment)
-        .enq()?;
-    Ok(())
-}
-
-// Make `Node` movable to GPU buffers by implementing `OclPrm`
-unsafe impl OclPrm for Node {}
-unsafe impl OclPrm for ReplicaId {}
+unsafe impl cl::Parameter for Node {}
+unsafe impl cl::Parameter for ReplicaId {}
 
 #[derive(Debug, Clone, Copy)]
 pub enum TreeOptions {
@@ -45,42 +21,40 @@ pub enum TreeOptions {
 
 // Manages buffers
 pub struct GPUContext {
-    pro_que: ProQue,
+    program: cl::Program,
     tree_builder: Option<TreeBuilder<U8>>,
     config: Config,
 }
 
 impl GPUContext {
     pub fn default(config: Config, tree_options: TreeOptions) -> NSEResult<GPUContext> {
-        GPUContext::new(utils::default_device()?, config, tree_options)
+        GPUContext::new(cl::Device::all()?[0].clone(), config, tree_options)
     }
 
-    pub fn new(device: Device, config: Config, tree_options: TreeOptions) -> NSEResult<GPUContext> {
+    pub fn new(
+        device: cl::Device,
+        config: Config,
+        tree_options: TreeOptions,
+    ) -> NSEResult<GPUContext> {
         info!(
             "Initializing a new NSE GPU context on device: {}",
-            device.name()?
+            device.name()
         );
 
-        if !is_little_endian(device)? {
+        if !device.is_little_endian()? {
             Err(GPUError::Other("Device should be little-endian!".into()))?;
         }
 
         info!("Compiling kernels...");
         let code = sources::generate_nse_program(config);
-        let pro_que = ProQue::builder()
-            .device(device)
-            .src(code)
-            .dims(config.num_nodes_window)
-            .build()?;
+        let program = cl::Program::from_opencl(device.clone(), &code)?;
 
         Ok(GPUContext {
-            pro_que,
+            program,
             config,
             tree_builder: match tree_options {
                 TreeOptions::Enabled { rows_to_discard } => Some(TreeBuilder::<U8>::new(
-                    Some(BatcherType::CustomGPU(GPUSelector::BusId(
-                        utils::get_bus_id(device)?,
-                    ))),
+                    Some(BatcherType::CustomGPU(GPUSelector::BusId(device.bus_id()))),
                     config.num_nodes_window,
                     TREE_BUILDER_BATCH_SIZE,
                     rows_to_discard,
@@ -90,16 +64,15 @@ impl GPUContext {
         })
     }
 
-    pub(crate) fn build_kernel(&mut self, kernel_name: &str) -> KernelBuilder {
+    pub(crate) fn build_kernel(&mut self, kernel_name: &str) -> cl::Kernel {
         info!("Calling {}()...", kernel_name);
-        let mut k = self.pro_que.kernel_builder(kernel_name);
-        k.global_work_size([self.leaf_count()]);
-        k
+        self.program
+            .create_kernel(kernel_name, self.leaf_count(), None)
     }
 
-    pub(crate) fn create_buffer(&mut self) -> GPUResult<Buffer<Node>> {
+    pub(crate) fn create_buffer(&mut self) -> GPUResult<cl::Buffer<Node>> {
         info!("Creating buffer...");
-        Ok(self.pro_que.create_buffer::<Node>()?)
+        Ok(self.program.create_buffer::<Node>(self.leaf_count())?)
     }
 
     pub(crate) fn leaf_count(&self) -> usize {
@@ -107,25 +80,12 @@ impl GPUContext {
     }
 }
 
-macro_rules! call_kernel {
-    ($ctx:expr, $name:expr, $($arg:expr),*) => {{
-        let kernel =
-            $ctx
-            .build_kernel($name)
-            $(.arg($arg))*
-            .build()?;
-        unsafe {
-            kernel.enq()?;
-        }
-    }};
-}
-
 const TREE_BUILDER_BATCH_SIZE: usize = 400_000;
 
 pub struct GPU {
     context: GPUContext,
     combine_batch_size: usize,
-    current_layer: Buffer<Node>, // This has the last generated layer (In ordinary form)
+    current_layer: cl::Buffer<Node>, // This has the last generated layer (In ordinary form)
     pub config: Config,
 }
 
@@ -134,20 +94,19 @@ impl GPU {
         &mut self.context.tree_builder
     }
 
-    fn replace_buffer(&mut self, buff: Buffer<Node>) {
+    fn replace_buffer(&mut self, buff: cl::Buffer<Node>) {
         std::mem::replace(&mut self.current_layer, buff);
     }
 
     // Overwrite current layer
     pub fn push_layer(&mut self, layer: &Layer) -> NSEResult<()> {
-        write_buffer(&mut self.current_layer, 0, &layer.0)?; // Push montgomery form in buffer
+        self.current_layer.write_from(0, &layer.0)?; // Push montgomery form in buffer
         let ordinary = self.context.create_buffer()?; // Create new temp buffer
         call_kernel!(
-            self.context,
-            "generate_ordinary",
+            self.context.build_kernel("generate_ordinary"),
             &self.current_layer,
             &ordinary
-        );
+        )?;
         self.replace_buffer(ordinary); // Current buffer has now the ordinary form
         Ok(())
     }
@@ -172,20 +131,19 @@ impl NarrowStackedExpander for GPU {
     ) -> NSEResult<Layer> {
         let mut l = Layer(vec![Node::default(); self.leaf_count()]);
         let ord_output = self.context.create_buffer()?;
+
         call_kernel!(
-            self.context,
-            "generate_mask",
+            self.context.build_kernel("generate_mask"),
             &ord_output,
             replica_id,
             window_index as u32
-        );
+        )?;
         call_kernel!(
-            self.context,
-            "generate_montgomery",
+            self.context.build_kernel("generate_montgomery"),
             &ord_output,
             &self.current_layer
-        );
-        read_buffer(&self.current_layer, 0, &mut l.0)?;
+        )?;
+        self.current_layer.read_into(0, &mut l.0)?;
         self.replace_buffer(ord_output);
         Ok(l)
     }
@@ -199,21 +157,19 @@ impl NarrowStackedExpander for GPU {
         let mut l = Layer(vec![Node::default(); self.leaf_count()]);
         let ord_output = self.context.create_buffer()?;
         call_kernel!(
-            self.context,
-            "generate_expander",
+            self.context.build_kernel("generate_expander"),
             &self.current_layer,
             &ord_output,
             replica_id,
             window_index as u32,
             layer_index as u32
-        );
+        )?;
         call_kernel!(
-            self.context,
-            "generate_montgomery",
+            self.context.build_kernel("generate_montgomery"),
             &ord_output,
             &self.current_layer
-        );
-        read_buffer(&self.current_layer, 0, &mut l.0)?;
+        )?;
+        self.current_layer.read_into(0, &mut l.0)?;
         self.replace_buffer(ord_output);
         Ok(l)
     }
@@ -227,27 +183,28 @@ impl NarrowStackedExpander for GPU {
         let mut l = Layer(vec![Node::default(); self.leaf_count()]);
         let ord_output = self.context.create_buffer()?;
         call_kernel!(
-            self.context,
-            "generate_butterfly",
+            self.context.build_kernel("generate_butterfly"),
             &self.current_layer,
             &ord_output,
             replica_id,
             window_index as u32,
             layer_index as u32
-        );
+        )?;
         call_kernel!(
-            self.context,
-            "generate_montgomery",
+            self.context.build_kernel("generate_montgomery"),
             &ord_output,
             &self.current_layer
-        );
-        read_buffer(&self.current_layer, 0, &mut l.0)?;
+        )?;
+        self.current_layer.read_into(0, &mut l.0)?;
         self.replace_buffer(ord_output);
         Ok(l)
     }
 
     fn finalize(&mut self) -> NSEResult<()> {
-        call_kernel!(self.context, "to_montgomery", &self.current_layer);
+        call_kernel!(
+            self.context.build_kernel("to_montgomery"),
+            &self.current_layer
+        )?;
         Ok(())
     }
 
@@ -260,17 +217,16 @@ impl NarrowStackedExpander for GPU {
         // Montgomery form of mask is in kernel_buffer!
         let mut l = vec![Node::default(); segment.len()];
         let mut data = self.context.create_buffer()?;
-        write_buffer(&mut data, offset, &segment)?;
+        data.write_from(offset, &segment)?;
         call_kernel!(
-            self.context,
-            "combine_segment",
+            self.context.build_kernel("combine_segment"),
             &self.current_layer,
             &data,
             offset as u32,
             segment.len() as u32,
             is_decode as u32
-        );
-        read_buffer(&data, offset, &mut l)?;
+        )?;
+        data.read_into(offset, &mut l)?;
         Ok(l)
     }
 

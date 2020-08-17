@@ -2,7 +2,6 @@ mod error;
 mod gpu;
 mod pool;
 mod sources;
-pub mod utils;
 
 pub use error::*;
 use ff::{Field, PrimeField};

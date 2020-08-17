@@ -1,5 +1,6 @@
 use rand::{thread_rng, Rng};
 use rust_fil_nse_gpu::*;
+use rust_gpu_tools::opencl as cl;
 use std::time::Instant;
 use structopt::StructOpt;
 
@@ -72,7 +73,7 @@ fn bench_sealer(
             original_data: Layer::random(&mut rng, config.num_nodes_window),
         })
         .collect();
-    let mut pool = SealerPool::new(utils::all_devices().unwrap(), config, tree_options).unwrap();
+    let mut pool = SealerPool::new(cl::Device::all().unwrap(), config, tree_options).unwrap();
 
     timer!(
         {

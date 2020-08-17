@@ -1,7 +1,7 @@
 use crate::NarrowStackedExpander;
 use crate::{Config, GPUContext, LayerOutput, NSEResult, Sealer, SealerInput, TreeOptions, GPU};
 use log::*;
-use ocl::Device;
+use rust_gpu_tools::opencl as cl;
 use std::sync::mpsc;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
@@ -20,7 +20,11 @@ pub struct SealerPool {
 }
 
 impl SealerPool {
-    pub fn new(devices: Vec<Device>, config: Config, tree_options: TreeOptions) -> NSEResult<Self> {
+    pub fn new(
+        devices: Vec<cl::Device>,
+        config: Config,
+        tree_options: TreeOptions,
+    ) -> NSEResult<Self> {
         info!("Creating a sealer pool of {} devices.", devices.len());
 
         let mut workers = Vec::new();
@@ -33,7 +37,7 @@ impl SealerPool {
         };
 
         for (i, dev) in devices.into_iter().enumerate() {
-            info!("Creating Sealer-Worker on device[{}]: {}", i, dev.name()?);
+            info!("Creating Sealer-Worker on device[{}]: {}", i, dev.name());
 
             let (fn_tx, fn_rx): (
                 mpsc::Sender<(SealerInput, mpsc::Sender<NSEResult<LayerOutput>>)>,
@@ -170,7 +174,7 @@ mod tests {
 
         let pool_outputs = {
             let mut pool = SealerPool::new(
-                utils::all_devices().unwrap(),
+                cl::Device::all().unwrap(),
                 TEST_CONFIG,
                 TreeOptions::Enabled { rows_to_discard: 2 },
             )

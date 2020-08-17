@@ -1,19 +1,15 @@
+use rust_gpu_tools::opencl as cl;
+
 #[derive(thiserror::Error, Debug)]
 pub enum GPUError {
     #[error("Ocl Error: {0}")]
-    Ocl(ocl::Error),
+    OpenCL(#[from] cl::GPUError),
     #[error("Error: {0}")]
     Other(String),
 }
 
 #[allow(dead_code)]
 pub type GPUResult<T> = std::result::Result<T, GPUError>;
-
-impl From<ocl::Error> for GPUError {
-    fn from(error: ocl::Error) -> Self {
-        GPUError::Ocl(error)
-    }
-}
 
 #[derive(thiserror::Error, Debug)]
 pub enum NSEError {
@@ -25,8 +21,8 @@ pub enum NSEError {
 
 pub type NSEResult<T> = std::result::Result<T, NSEError>;
 
-impl From<ocl::Error> for NSEError {
-    fn from(error: ocl::Error) -> Self {
-        NSEError::GPU(GPUError::Ocl(error))
+impl From<cl::GPUError> for NSEError {
+    fn from(error: cl::GPUError) -> Self {
+        NSEError::GPU(GPUError::OpenCL(error))
     }
 }
