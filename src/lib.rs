@@ -1,6 +1,7 @@
 mod error;
 mod gpu;
 mod pool;
+mod scheduler;
 mod sources;
 
 pub use error::*;

@@ -1,22 +1,15 @@
+use super::scheduler::schedule;
 use crate::NarrowStackedExpander;
 use crate::{Config, GPUContext, LayerOutput, NSEResult, Sealer, SealerInput, TreeOptions, GPU};
 use log::*;
 use rust_gpu_tools::opencl as cl;
 use std::sync::mpsc;
-use std::sync::{Arc, Condvar, Mutex};
-use std::thread;
-use std::time::Duration;
-
-struct SealerWorker {
-    died: bool,
-    busy: Arc<Mutex<bool>>,
-    channel: mpsc::Sender<(SealerInput, mpsc::Sender<NSEResult<LayerOutput>>)>,
-}
+use std::sync::{Arc, Mutex};
 
 pub struct SealerPool {
-    lock: Mutex<()>,
-    cond: Arc<Condvar>,
-    workers: Vec<SealerWorker>,
+    devices: Vec<cl::Device>,
+    config: Config,
+    tree_options: TreeOptions,
 }
 
 impl SealerPool {
@@ -27,120 +20,48 @@ impl SealerPool {
     ) -> NSEResult<Self> {
         info!("Creating a sealer pool of {} devices.", devices.len());
 
-        let mut workers = Vec::new();
-        let cond = Arc::new(Condvar::new());
-
-        let tree_enabled = if let TreeOptions::Enabled { rows_to_discard: _ } = tree_options {
-            true
-        } else {
-            false
-        };
-
-        for (i, dev) in devices.into_iter().enumerate() {
-            info!("Creating Sealer-Worker on device[{}]: {}", i, dev.name());
-
-            let (fn_tx, fn_rx): (
-                mpsc::Sender<(SealerInput, mpsc::Sender<NSEResult<LayerOutput>>)>,
-                mpsc::Receiver<(SealerInput, mpsc::Sender<NSEResult<LayerOutput>>)>,
-            ) = mpsc::channel();
-
-            let busy = Arc::new(Mutex::new(false));
-            workers.push(SealerWorker {
-                channel: fn_tx,
-                busy: Arc::clone(&busy),
-                died: false,
-            });
-
-            let cond = Arc::clone(&cond);
-            thread::spawn(move || {
-                match GPUContext::new(dev, config.clone(), tree_options.clone())
-                    .and_then(|ctx| GPU::new(ctx, config.clone()))
-                {
-                    Ok(mut gpu) => {
-                        info!(
-                            "Device[{}]: GPU context initialized, waiting for inputs...",
-                            i
-                        );
-
-                        for (inp, sender) in fn_rx.into_iter() {
-                            info!("Device[{}]: New sealing request!", i);
-                            let mut busy = busy.lock().unwrap();
-                            match Sealer::new(config.clone(), inp, &mut gpu, tree_enabled) {
-                                Ok(sealer) => {
-                                    for output in sealer {
-                                        // If receiving channel is dead
-                                        if sender.send(output).is_err() {
-                                            error!("Device[{}]: Requester died!", i);
-                                            break;
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    error!("Device[{}]: Cannot create sealer! Error: {}", i, e);
-                                }
-                            }
-                            *busy = false;
-                            drop(busy);
-                            cond.notify_all(); // Notify that one GPU is not busy anymore
-                            info!("Device[{}]: Sealing finished, waiting for inputs...", i);
-                        }
-                    }
-                    Err(e) => {
-                        error!("Device[{}]: Cannot create GPU context! Error: {}", i, e);
-                    }
-                }
-                warn!("Device[{}]: Worker died.", i);
-                cond.notify_all(); // Notify when worker dies
-            });
-        }
         Ok(SealerPool {
-            workers,
-            lock: Mutex::new(()),
-            cond,
+            devices,
+            config,
+            tree_options,
         })
     }
 
     /// Gets a SealerInput and returns a receiving output channel as soon as a free GPU is found.
     /// Blocks if all GPUs are busy.
     pub fn seal_on_gpu(&mut self, inp: SealerInput) -> mpsc::Receiver<NSEResult<LayerOutput>> {
-        const TIMEOUT: Duration = Duration::from_millis(5000);
-
-        // Lock until a free GPU is found
-        let mut lock = self.lock.lock().unwrap();
-
-        loop {
-            // Try finding a free GPU
-            for worker in self.workers.iter_mut().filter(|w| !w.died) {
-                // Check if GPU is free
-                match worker.busy.try_lock() {
-                    Ok(mut busy) => {
-                        if !*busy {
-                            *busy = true;
-                            // A free GPU found! Create a communication channel and pass inputs
-                            let (tx, rx): (
-                                mpsc::Sender<NSEResult<LayerOutput>>,
-                                mpsc::Receiver<NSEResult<LayerOutput>>,
-                            ) = mpsc::channel();
-                            if worker.channel.send((inp.clone(), tx)).is_err() {
-                                warn!("Dead worker found! Marking as dead...");
-                                worker.died = true;
-                                continue;
-                            }
-                            return rx;
-                        }
+        let (tx, rx): (
+            mpsc::Sender<NSEResult<LayerOutput>>,
+            mpsc::Receiver<NSEResult<LayerOutput>>,
+        ) = mpsc::channel();
+        let tx = Arc::new(Mutex::new(tx));
+        let config = self.config.clone();
+        let tree_options = self.tree_options.clone();
+        schedule(&self.devices, move |dev| {
+            let tree_enabled =
+                if let TreeOptions::Enabled { rows_to_discard: _ } = tree_options.clone() {
+                    true
+                } else {
+                    false
+                };
+            let tx_result = Arc::clone(&tx);
+            if let Err(e) = move || -> NSEResult<()> {
+                let tx = tx.lock().unwrap();
+                let ctx = GPUContext::new(dev.clone(), config.clone(), tree_options.clone())?;
+                let mut gpu = GPU::new(ctx, config.clone())?;
+                let sealer = Sealer::new(config.clone(), inp, &mut gpu, tree_enabled)?;
+                for output in sealer {
+                    // If receiving channel is dead
+                    if tx.send(output).is_err() {
+                        break;
                     }
-                    Err(_) => {}
                 }
+                Ok(())
+            }() {
+                let _ = tx_result.lock().unwrap().send(Err(e));
             }
-
-            if self.workers.iter().filter(|w| !w.died).count() == 0 {
-                panic!("No workers exist!");
-            }
-
-            // No free GPUs found, wait for a GPU to notify us
-            info!("Waiting for a free GPU...");
-            lock = self.cond.wait_timeout(lock, TIMEOUT).unwrap().0;
-        }
+        });
+        return rx;
     }
 }
 

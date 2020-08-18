@@ -21,3 +21,4 @@ neptune = { version = "1.2.0", features = ["gpu"] }
 generic-array = "0.13.2"
 log = "0.4.8"
 env_logger = "0.7.1"
+lazy_static = "1.4.0"
