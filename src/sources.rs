@@ -12,7 +12,7 @@ static COMBINE_SRC: &str = include_str!("cl/combine.cl");
 
 static SHA256_BITS: usize = 256;
 
-fn config(conf: Config) -> String {
+fn config(conf: &Config) -> String {
     assert!(conf.num_nodes_window > conf.k as usize);
     assert!(conf.num_nodes_window.count_ones() == 1);
     assert!(conf.k.count_ones() == 1);
@@ -46,7 +46,7 @@ fn config(conf: Config) -> String {
     )
 }
 
-pub fn generate_nse_program(conf: Config) -> String {
+pub fn generate_nse_program(conf: &Config) -> String {
     join(
         &[
             config(conf),

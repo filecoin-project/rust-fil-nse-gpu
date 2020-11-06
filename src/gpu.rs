@@ -1,7 +1,3 @@
-use super::{
-    sources, utils, Config, GPUError, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node,
-    ReplicaId, COMBINE_BATCH_SIZE,
-};
 use generic_array::typenum::U8;
 use log::info;
 use neptune::batch_hasher::BatcherType;
@@ -9,6 +5,11 @@ use neptune::cl::GPUSelector;
 use neptune::tree_builder::TreeBuilder;
 use ocl::builders::KernelBuilder;
 use ocl::{Buffer, Device, OclPrm, ProQue};
+
+use crate::{
+    sources, utils, Config, GPUError, GPUResult, Layer, NSEResult, NarrowStackedExpander, Node,
+    ReplicaId, COMBINE_BATCH_SIZE,
+};
 
 pub fn is_little_endian(d: ocl::Device) -> GPUResult<bool> {
     match d.info(ocl::enums::DeviceInfo::EndianLittle)? {
@@ -62,11 +63,11 @@ impl GPUContext {
         );
 
         if !is_little_endian(device)? {
-            Err(GPUError::Other("Device should be little-endian!".into()))?;
+            return Err(GPUError::Other("Device should be little-endian!".into()).into());
         }
 
         info!("Compiling kernels...");
-        let code = sources::generate_nse_program(config);
+        let code = sources::generate_nse_program(&config);
         let pro_que = ProQue::builder()
             .device(device)
             .src(code)
@@ -75,7 +76,7 @@ impl GPUContext {
 
         Ok(GPUContext {
             pro_que,
-            config,
+            config: config.clone(),
             tree_builder: match tree_options {
                 TreeOptions::Enabled { rows_to_discard } => Some(TreeBuilder::<U8>::new(
                     Some(BatcherType::CustomGPU(GPUSelector::BusId(
@@ -90,7 +91,7 @@ impl GPUContext {
         })
     }
 
-    pub(crate) fn build_kernel(&mut self, kernel_name: &str) -> KernelBuilder {
+    pub(crate) fn build_kernel(&mut self, kernel_name: &str) -> KernelBuilder<'_> {
         info!("Calling {}()...", kernel_name);
         let mut k = self.pro_que.kernel_builder(kernel_name);
         k.global_work_size([self.leaf_count()]);

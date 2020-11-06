@@ -146,7 +146,7 @@ fn main() {
             bench_sealer(config, opts.samples, tree_options, opts.num_windows)
         );
     } else {
-        let ctx = GPUContext::default(config, tree_options).unwrap();
+        let ctx = GPUContext::default(config.clone(), tree_options).unwrap();
         let mut gpu = GPU::new(ctx, config).unwrap();
 
         println!("Mask: {}ms", bench_mask(&mut gpu, opts.samples));

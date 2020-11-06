@@ -1,14 +1,16 @@
-use crate::NarrowStackedExpander;
-use crate::{Config, GPUContext, LayerOutput, NSEResult, Sealer, SealerInput, TreeOptions, GPU};
-use log::*;
-use ocl::Device;
-use std::sync::mpsc;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use log::*;
+use ocl::Device;
+
+use crate::NarrowStackedExpander;
+use crate::{Config, GPUContext, LayerOutput, NSEResult, Sealer, SealerInput, TreeOptions, GPU};
+
 struct SealerWorker {
     died: bool,
+    #[allow(clippy::mutex_atomic)]
     busy: Arc<Mutex<bool>>,
     channel: mpsc::Sender<(SealerInput, mpsc::Sender<NSEResult<LayerOutput>>)>,
 }
@@ -35,12 +37,9 @@ impl SealerPool {
         for (i, dev) in devices.into_iter().enumerate() {
             info!("Creating Sealer-Worker on device[{}]: {}", i, dev.name()?);
 
-            let (fn_tx, fn_rx): (
-                mpsc::Sender<(SealerInput, mpsc::Sender<NSEResult<LayerOutput>>)>,
-                mpsc::Receiver<(SealerInput, mpsc::Sender<NSEResult<LayerOutput>>)>,
-            ) = mpsc::channel();
+            let (fn_tx, fn_rx) = mpsc::channel();
 
-            let busy = Arc::new(Mutex::new(false));
+            let busy = Default::default();
             workers.push(SealerWorker {
                 channel: fn_tx,
                 busy: Arc::clone(&busy),
@@ -48,8 +47,9 @@ impl SealerPool {
             });
 
             let cond = Arc::clone(&cond);
+            let config = config.clone();
             thread::spawn(move || {
-                match GPUContext::new(dev, config.clone(), tree_options.clone())
+                match GPUContext::new(dev, config.clone(), tree_options)
                     .and_then(|ctx| GPU::new(ctx, config.clone()))
                 {
                     Ok(mut gpu) => {
@@ -108,24 +108,21 @@ impl SealerPool {
             // Try finding a free GPU
             for worker in self.workers.iter_mut().filter(|w| !w.died) {
                 // Check if GPU is free
-                match worker.busy.try_lock() {
-                    Ok(mut busy) => {
-                        if !*busy {
-                            *busy = true;
-                            // A free GPU found! Create a communication channel and pass inputs
-                            let (tx, rx): (
-                                mpsc::Sender<NSEResult<LayerOutput>>,
-                                mpsc::Receiver<NSEResult<LayerOutput>>,
-                            ) = mpsc::channel();
-                            if worker.channel.send((inp.clone(), tx)).is_err() {
-                                warn!("Dead worker found! Marking as dead...");
-                                worker.died = true;
-                                continue;
-                            }
-                            return rx;
+                if let Ok(mut busy) = worker.busy.try_lock() {
+                    if !*busy {
+                        *busy = true;
+                        // A free GPU found! Create a communication channel and pass inputs
+                        let (tx, rx): (
+                            mpsc::Sender<NSEResult<LayerOutput>>,
+                            mpsc::Receiver<NSEResult<LayerOutput>>,
+                        ) = mpsc::channel();
+                        if worker.channel.send((inp.clone(), tx)).is_err() {
+                            warn!("Dead worker found! Marking as dead...");
+                            worker.died = true;
+                            continue;
                         }
+                        return rx;
                     }
-                    Err(_) => {}
                 }
             }
 

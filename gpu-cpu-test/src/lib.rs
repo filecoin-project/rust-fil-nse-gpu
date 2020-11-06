@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
+    use bellperson::bls::{Fr, FrRepr};
     use ff::{Field, PrimeField};
     use merkletree::store::StoreConfig;
-    use bellperson::bls::{Fr, FrRepr};
     use rand::{thread_rng, Rng};
     use rust_fil_nse_gpu::*;
     use storage_proofs::cache_key::CacheKey;

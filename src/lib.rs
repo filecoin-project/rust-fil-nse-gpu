@@ -1,3 +1,6 @@
+#![deny(clippy::all, clippy::perf, clippy::correctness, rust_2018_idioms)]
+#![warn(clippy::unwrap_used)]
+
 mod error;
 mod gpu;
 mod pool;
@@ -30,7 +33,8 @@ impl Node {
 
     /// Convert a slice of `Node`s to a slice of `Fr`s.
     /// This conversion is accurate because `Node`s are in Montgomery Form.
-    fn as_frs<'a>(nodes: &'a [Node]) -> &'a [Fr] {
+    #[allow(clippy::wrong_self_convention)]
+    fn as_frs(nodes: &[Node]) -> &[Fr] {
         assert_eq!(
             std::mem::size_of::<Fr>(),
             std::mem::size_of::<Node>(),
@@ -42,7 +46,8 @@ impl Node {
 
     /// Convert a slice of `Fr`s to a slice of `Node`s.
     /// This conversion is accurate because `Node`s are in Montgomery Form.
-    fn from_frs<'a>(frs: &'a [Fr]) -> &'a [Node] {
+    #[allow(clippy::wrong_self_convention)]
+    fn from_frs(frs: &[Fr]) -> &[Node] {
         assert_eq!(
             std::mem::size_of::<Fr>(),
             std::mem::size_of::<Node>(),
@@ -167,7 +172,7 @@ pub trait NarrowStackedExpander: Sized {
 // layers are 1-indexed,
 
 /// The configuration parameters for NSE.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// Batch hashing factor.
     pub k: u32,
@@ -319,8 +324,8 @@ impl<'a> KeyGenerator<'a> {
         self.gpu.push_layer(&target_layer_data)
     }
 
-    fn config(&self) -> Config {
-        self.gpu.config
+    fn config(&self) -> &Config {
+        &self.gpu.config
     }
 
     fn layers_remaining(&self) -> usize {
