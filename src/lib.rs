@@ -4,13 +4,14 @@ mod pool;
 mod sources;
 pub mod utils;
 
-pub use error::*;
+use bellperson::bls::{Fr, FrRepr};
 use ff::{Field, PrimeField};
-pub use gpu::*;
 use neptune::tree_builder::TreeBuilderTrait;
-use paired::bls12_381::{Fr, FrRepr};
-pub use pool::*;
 use rand::{Rng, RngCore};
+
+pub use self::error::*;
+pub use self::gpu::*;
+pub use self::pool::*;
 
 // TODO: Move these constants into configuration of GPU, Sealer, KeyGenerator, etc.
 const COMBINE_BATCH_SIZE: usize = 500000;
@@ -418,8 +419,8 @@ impl<'a> ExactSizeIterator for KeyGenerator<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bellperson::bls::{Fr, FrRepr};
     use ff::PrimeField;
-    use paired::bls12_381::{Fr, FrRepr};
 
     const TEST_CONFIG: Config = Config {
         k: 2,

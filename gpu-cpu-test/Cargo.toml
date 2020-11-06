@@ -5,10 +5,15 @@ authors = ["Keyvan Kambakhsh <keyvankambakhsh@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-rust-fil-nse-gpu = { path = ".." }
-storage-proofs = { git="https://github.com/filecoin-project/rust-fil-proofs", branch="feat/nse" }
+rust-fil-nse-gpu = { path = "..", default-features = false }
+storage-proofs = { git = "https://github.com/filecoin-project/rust-fil-proofs", branch = "feat/nse", default-features = false, features = ["gpu"] }
 ff = { version = "0.2.0", package = "fff" }
-paired = "0.20.0"
 rand = "0.7"
 merkletree = "0.21.0"
 tempfile = "3"
+bellperson = { version = "0.12", default-features = false, features = ["gpu"] }
+
+[features]
+default = ["pairing"]
+pairing = ["bellperson/pairing", "rust-fil-nse-gpu/pairing", "storage-proofs/pairing"]
+blst = ["bellperson/blst", "rust-fil-nse-gpu/blst", "storage-proofs/blst"]

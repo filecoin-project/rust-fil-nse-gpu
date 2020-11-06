@@ -286,8 +286,8 @@ impl NarrowStackedExpander for GPU {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bellperson::bls::Fr;
     use ff::{Field, PrimeField};
-    use paired::bls12_381::Fr;
 
     const TEST_CONFIG: Config = Config {
         k: 4,

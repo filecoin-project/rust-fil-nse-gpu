@@ -1,6 +1,7 @@
-use super::Config;
+use bellperson::bls::Fr;
 use itertools::join;
-use paired::bls12_381::Fr;
+
+use crate::Config;
 
 static SHA256_SRC: &str = include_str!("cl/hash/sha256.cl");
 static COMMON_SRC: &str = include_str!("cl/common.cl");
